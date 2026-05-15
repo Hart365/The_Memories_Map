@@ -1,0 +1,11 @@
+.addBtn { margin-bottom: 1.5rem; }
+
+.editor { margin-bottom: 1.5rem; max-width: 600px; }
+
+.editorTitle { margin: 0 0 1rem; font-size: 1rem; }
+
+.optional { font-weight: 400; font-size: 0.875rem; color: var(--color-text); }
+
+.charCount { font-size: 0.8125rem; text-align: right; margin: 0.25rem 0 0; color: var(--color-text); }
+
+.actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }

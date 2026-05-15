@@ -1,0 +1,97 @@
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.topBar h1 { margin: 0; }
+
+.createForm {
+  margin-bottom: 2rem;
+}
+
+.formTitle {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  font-size: 1.125rem;
+}
+
+.formActions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.empty {
+  color: var(--color-text);
+  font-style: italic;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: 1.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mapCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.mapCardBody {
+  flex: 1;
+  margin-bottom: 1rem;
+}
+
+.mapName {
+  font-size: 1.125rem;
+  margin: 0 0 0.25rem;
+}
+
+.mapName a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.mapName a:hover { text-decoration: underline; }
+
+.mapDesc {
+  font-size: 0.9375rem;
+  margin: 0 0 0.5rem;
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mapMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.themeBadge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.mapCardActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}

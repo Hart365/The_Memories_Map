@@ -1,0 +1,99 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Global CSS – Memories Map
+   WCAG AAA target: 7:1 contrast ratio for normal text, 4.5:1 for large text
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Design tokens – overridden by theme via JS on :root */
+:root {
+  --color-primary:    #1a5276;
+  --color-secondary:  #2e86c1;
+  --color-accent:     #f39c12;
+  --color-bg:         #f8f9fa;
+  --color-text:       #212529;
+  --color-surface:    #ffffff;
+  --color-border:     #ced4da;
+  --color-error:      #b91c1c;
+  --color-success:    #166534;
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --radius:    0.5rem;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+}
+
+/* ── Reset ────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  font-size: 100%;              /* respect user browser setting */
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Focus visible – never remove, only style ─────────────────────────────── */
+:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* ── Skip link ───────────────────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -9999px;
+  left: 1rem;
+  background: var(--color-primary);
+  color: #fff;
+  padding: .5rem 1rem;
+  border-radius: 0 0 var(--radius) var(--radius);
+  font-weight: 700;
+  z-index: 9999;
+  text-decoration: none;
+}
+.skip-link:focus { top: 0; }
+
+/* ── Typography ───────────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin-top: 0; }
+a { color: var(--color-secondary); }
+a:hover { text-decoration: underline; }
+
+/* ── Leaflet overrides ───────────────────────────────────────────────────── */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background: var(--color-bg);
+}
+
+/* Ensure Leaflet controls meet contrast requirements */
+.leaflet-bar a {
+  color: var(--color-text) !important;
+  background: var(--color-surface) !important;
+  border-color: var(--color-border) !important;
+}
+
+/* ── Utility classes ─────────────────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.visually-hidden { composes: sr-only; }

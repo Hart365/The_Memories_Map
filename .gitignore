@@ -1,30 +1,37 @@
-/vendor/
-node_modules/
-npm-debug.log
-yarn-error.log
+# Backend
+/backend/vendor/
+/backend/.env
+/backend/.env.backup
+/backend/storage/app/
+/backend/storage/framework/cache/
+/backend/storage/framework/sessions/
+/backend/storage/framework/testing/
+/backend/storage/framework/views/
+/backend/storage/logs/
+/backend/bootstrap/cache/*.php
 
-# Laravel 4 specific
-bootstrap/compiled.php
-app/storage/
+# Frontend
+/frontend/node_modules/
+/frontend/dist/
 
-# Laravel 5 & Lumen specific
-public/storage
-public/hot
+# Media (never commit media files)
+/media/
 
-# Laravel 5 & Lumen specific with changed public path
-public_html/storage
-public_html/hot
+# Docker
+/docker/db_data/
 
-storage/*.key
-.env
-Homestead.yaml
-Homestead.json
-/.vagrant
-.phpunit.result.cache
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
 
-/public/build
-/storage/pail
-.env.backup
-.env.production
-.phpactor.json
-auth.json
+# IDE
+.vscode/settings.json
+.idea/
+*.code-workspace
+
+# Compiled frontend assets (output to backend/public by Vite build)
+/backend/public/assets/
+/backend/public/index.html
+!/backend/public/.gitkeep
