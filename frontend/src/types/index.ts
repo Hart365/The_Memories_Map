@@ -40,7 +40,14 @@ export interface MediaFile {
   latitude: number | null
   longitude: number | null
   altitude: number | null
+  location_name: string | null
+  location_address: string | null
+  location_city: string | null
+  location_country: string | null
   captured_at: string | null
+  timezone: string | null
+  timezone_offset: number | null
+  captured_at_local: string | null
   camera_make: string | null
   camera_model: string | null
   width: number | null

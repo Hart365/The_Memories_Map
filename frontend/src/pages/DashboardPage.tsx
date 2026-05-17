@@ -12,7 +12,7 @@ export default function DashboardPage() {
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
 
-  const { data: maps, isLoading } = useQuery<MemoriesMap[]>({
+  const { data: maps, isLoading, isError } = useQuery<MemoriesMap[]>({
     queryKey: ['maps'],
     queryFn: () => api.get('/maps').then((r) => r.data),
   })
@@ -97,6 +97,12 @@ export default function DashboardPage() {
       )}
 
       {isLoading && <p aria-live="polite" aria-busy="true">Loading your maps…</p>}
+
+      {isError && (
+        <p className={styles.empty} role="alert">
+          Could not load maps. Please refresh and try again.
+        </p>
+      )}
 
       {maps && maps.length === 0 && (
         <p className={styles.empty}>You have no Memories Maps yet. Create one to get started!</p>

@@ -53,7 +53,7 @@ services:
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "memories_map_user", "-psecret"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "memories_map_user", "-psecret" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -72,6 +72,7 @@ services:
       - ./frontend:/app
     environment:
       VITE_API_URL: http://localhost:8080
+      VITE_DEV_PROXY_TARGET: http://nginx
     networks:
       - mm_net
 

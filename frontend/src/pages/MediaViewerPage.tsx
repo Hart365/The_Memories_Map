@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import api from '@/lib/api'
+import { mediaFileUrl } from '@/lib/mediaUrl'
 import type { MediaFile } from '@/types'
 import NoteEditor from '@/components/notes/NoteEditor'
+import LocationEditor from '@/components/media/LocationEditor'
 import styles from './MediaViewerPage.module.css'
 
 export default function MediaViewerPage() {
@@ -68,12 +70,12 @@ export default function MediaViewerPage() {
             className={styles.mediaEl}
             aria-label={media.user_caption ?? media.original_name}
           >
-            <source src={`/api/maps/${mapId}/media/${mediaId}/file`} type={media.mime_type} />
-            <p>Your browser does not support the video element. <a href={`/api/maps/${mapId}/media/${mediaId}/file`}>Download the video</a>.</p>
+            <source src={mediaFileUrl(mapId!, mediaId!)} type={media.mime_type} />
+            <p>Your browser does not support the video element. <a href={mediaFileUrl(mapId!, mediaId!)}>Download the video</a>.</p>
           </video>
         ) : (
           <img
-            src={`/api/maps/${mapId}/media/${mediaId}/file`}
+            src={mediaFileUrl(mapId!, mediaId!)}
             alt={media.user_caption ?? media.original_name}
             className={styles.mediaEl}
           />
@@ -90,7 +92,7 @@ export default function MediaViewerPage() {
           {media.captured_at && (
             <div>
               <dt>Captured</dt>
-              <dd>{new Date(media.captured_at).toLocaleString()}</dd>
+              <dd>{new Date(media.captured_at_local || media.captured_at).toLocaleString()}{media.captured_at_local && media.timezone && ` (${media.timezone})`}</dd>
             </div>
           )}
           {(media.latitude && media.longitude) && (
@@ -161,6 +163,9 @@ export default function MediaViewerPage() {
           </div>
         )}
       </div>
+
+      {/* Location editor */}
+      <LocationEditor mapId={mapId!} media={media} />
 
       {/* Media-level notes */}
       <NoteEditor mapId={Number(mapId)} mediaId={Number(mediaId)} noteType="media" />

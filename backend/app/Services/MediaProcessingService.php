@@ -13,17 +13,48 @@ class MediaProcessingService
 {
     private readonly string $storagePath;
     private readonly string $thumbPath;
+    private readonly GeocodingService $geocoder;
+    private readonly TimezoneService $timezone;
 
-    public function __construct()
+    public function __construct(GeocodingService $geocoder, TimezoneService $timezone)
     {
-        $this->storagePath = rtrim(config('filesystems.media_storage_path'), '/\\');
-        $this->thumbPath   = $this->storagePath . DIRECTORY_SEPARATOR . 'thumbnails';
+        $this->geocoder = $geocoder;
+        $this->timezone = $timezone;
+        $configuredPath = (string) config('filesystems.media_storage_path', '');
+        $fallbackPath = storage_path('app/private/media');
+        $candidates = array_values(array_unique(array_filter([
+            trim($configuredPath),
+            $fallbackPath,
+        ])));
 
-        foreach ([$this->storagePath, $this->thumbPath] as $dir) {
-            if (! is_dir($dir)) {
-                mkdir($dir, 0750, true);
+        $this->storagePath = $this->resolveWritableStoragePath($candidates);
+        $this->thumbPath   = $this->storagePath . DIRECTORY_SEPARATOR . 'thumbnails';
+    }
+
+    /**
+     * Pick the first path that can be created and written by the running PHP user.
+     * This keeps local Docker/dev usable even when MEDIA_STORAGE_PATH is misconfigured.
+     */
+    private function resolveWritableStoragePath(array $candidates): string
+    {
+        foreach ($candidates as $candidate) {
+            $base = rtrim($candidate, '/\\');
+
+            if ($base === '') {
+                continue;
+            }
+
+            $thumb = $base . DIRECTORY_SEPARATOR . 'thumbnails';
+
+            $baseOk = is_dir($base) || @mkdir($base, 0750, true);
+            $thumbOk = is_dir($thumb) || @mkdir($thumb, 0750, true);
+
+            if ($baseOk && $thumbOk && is_writable($base) && is_writable($thumb)) {
+                return $base;
             }
         }
+
+        throw new \RuntimeException('No writable media storage path is available.');
     }
 
     /**
@@ -79,6 +110,85 @@ class MediaProcessingService
         $media->delete();
     }
 
+    /**
+     * Rescan an existing media file for location data.
+     * Only geocodes if file has GPS but is missing enhanced location data.
+     * Results are saved directly to the database for persistence.
+     */
+    public function rescanForLocation(MediaFile $media): bool
+    {
+        // Skip if no GPS coordinates
+        if ($media->latitude === null || $media->longitude === null) {
+            return false;
+        }
+
+        // Skip if already has enhanced location data
+        if (!empty($media->location_name)) {
+            return false;
+        }
+
+        // Geocode and save to database
+        $location = $this->geocoder->reverseGeocode($media->latitude, $media->longitude);
+        
+        if ($location) {
+            $media->update([
+                'location_name' => $location['name'],
+                'location_address' => $location['address'],
+                'location_city' => $location['city'],
+                'location_country' => $location['country'],
+            ]);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Calculate timezone and local time from GPS coordinates and captured_at timestamp.
+     * Modifies the attributes array in place.
+     */
+    private function calculateTimezoneData(array &$attrs): void
+    {
+        // Need both GPS coordinates and a capture timestamp
+        if (empty($attrs['latitude']) || empty($attrs['longitude']) || empty($attrs['captured_at'])) {
+            return;
+        }
+
+        $tzData = $this->timezone->getTimezoneFromCoordinates(
+            $attrs['latitude'],
+            $attrs['longitude']
+        );
+
+        if (!$tzData) {
+            return;
+        }
+
+        $attrs['timezone'] = $tzData['timezone'];
+        $attrs['timezone_offset'] = $tzData['offset'];
+
+        // Convert captured_at (UTC) to local time
+        try {
+            $utcTime = $attrs['captured_at'];
+            if ($utcTime instanceof \Carbon\Carbon) {
+                $utcTime = $utcTime->toDateTime();
+            } elseif (is_string($utcTime)) {
+                $utcTime = new \DateTime($utcTime);
+            }
+
+            $localTime = $this->timezone->convertToLocalTime($utcTime, $tzData['timezone']);
+            if ($localTime) {
+                $attrs['captured_at_local'] = \Carbon\Carbon::instance($localTime);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Failed to calculate local time', [
+                'latitude' => $attrs['latitude'],
+                'longitude' => $attrs['longitude'],
+                'timezone' => $tzData['timezone'],
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     public function storagePath(string $filename): string
     {
         return $this->storagePath . DIRECTORY_SEPARATOR . $filename;
@@ -107,6 +217,17 @@ class MediaProcessingService
                 $attrs['latitude']  = $this->gpsToDecimal($gps['GPSLatitude'] ?? null, $gps['GPSLatitudeRef'] ?? 'N');
                 $attrs['longitude'] = $this->gpsToDecimal($gps['GPSLongitude'] ?? null, $gps['GPSLongitudeRef'] ?? 'E');
                 $attrs['altitude']  = isset($gps['GPSAltitude']) ? $this->rationalToFloat($gps['GPSAltitude']) : null;
+
+                // Reverse geocode to get location details
+                if ($attrs['latitude'] && $attrs['longitude']) {
+                    $location = $this->geocoder->reverseGeocode($attrs['latitude'], $attrs['longitude']);
+                    if ($location) {
+                        $attrs['location_name'] = $location['name'];
+                        $attrs['location_address'] = $location['address'];
+                        $attrs['location_city'] = $location['city'];
+                        $attrs['location_country'] = $location['country'];
+                    }
+                }
             }
 
             // Timestamp
@@ -126,13 +247,19 @@ class MediaProcessingService
             // Store sanitised EXIF (remove binary/thumbnail blobs)
             $safe = $exif;
             unset($safe['THUMBNAIL']);
-            $attrs['exif_json'] = $safe;
+
+            // EXIF data can contain non-UTF8 byte sequences that break JSON encoding.
+            $safe = $this->sanitizeForJson($safe);
+            $attrs['exif_json'] = $this->isJsonEncodable($safe) ? $safe : null;
         }
 
         // Dimensions
         [$w, $h] = @getimagesize($path) ?: [null, null];
         $attrs['width']  = $w;
         $attrs['height'] = $h;
+
+        // Calculate timezone and local time if we have GPS and timestamp
+        $this->calculateTimezoneData($attrs);
 
         return array_filter($attrs, fn ($v) => $v !== null);
     }
@@ -165,6 +292,15 @@ class MediaProcessingService
             if (count($m) >= 3) {
                 $attrs['latitude']  = (float) $m[1];
                 $attrs['longitude'] = (float) $m[2];
+
+                // Reverse geocode to get location details
+                $location = $this->geocoder->reverseGeocode($attrs['latitude'], $attrs['longitude']);
+                if ($location) {
+                    $attrs['location_name'] = $location['name'];
+                    $attrs['location_address'] = $location['address'];
+                    $attrs['location_city'] = $location['city'];
+                    $attrs['location_country'] = $location['country'];
+                }
             }
         }
 
@@ -183,6 +319,9 @@ class MediaProcessingService
                 break;
             }
         }
+
+        // Calculate timezone and local time if we have GPS and timestamp
+        $this->calculateTimezoneData($attrs);
 
         return array_filter($attrs, fn ($v) => $v !== null);
     }
@@ -257,5 +396,47 @@ class MediaProcessingService
     {
         exec('ffmpeg -version 2>&1', $_, $code);
         return $code === 0;
+    }
+
+    /**
+     * Recursively sanitize values so they can be safely JSON encoded.
+     * Non-UTF8 strings are converted to UTF-8 with invalid bytes stripped.
+     */
+    private function sanitizeForJson(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            $clean = [];
+            foreach ($value as $key => $item) {
+                $clean[(string) $key] = $this->sanitizeForJson($item);
+            }
+            return $clean;
+        }
+
+        if (is_string($value)) {
+            // If the string is not valid UTF-8, treat it as ISO-8859-1 (EXIF default).
+            // ISO-8859-1 → UTF-8 conversion always succeeds since every byte is defined.
+            if (!mb_check_encoding($value, 'UTF-8')) {
+                $value = mb_convert_encoding($value, 'UTF-8', 'ISO-8859-1');
+            }
+            // Strip null bytes and control characters that are invalid in JSON
+            // (U+0000–U+0008, U+000B, U+000C, U+000E–U+001F, U+007F).
+            return (string) preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value);
+        }
+
+        if (is_scalar($value) || $value === null) {
+            return $value;
+        }
+
+        return (string) $value;
+    }
+
+    private function isJsonEncodable(mixed $value): bool
+    {
+        try {
+            json_encode($value, JSON_THROW_ON_ERROR);
+            return true;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

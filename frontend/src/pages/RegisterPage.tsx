@@ -10,6 +10,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [errors, setErrors] = useState<Record<string, string[]>>({})
+  const [generalError, setGeneralError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const setAuth = useAuthStore((s) => s.setAuth)
   const navigate = useNavigate()
@@ -17,6 +18,7 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
+    setGeneralError(null)
     setLoading(true)
 
     try {
@@ -29,9 +31,13 @@ export default function RegisterPage() {
       setAuth(data.token, data.user)
       navigate('/dashboard')
     } catch (err: unknown) {
-      const apiErrors = (err as { response?: { data?: { errors?: Record<string, string[]> } } })
-        ?.response?.data?.errors ?? {}
+      const responseData = (err as { response?: { data?: { errors?: Record<string, string[]>; message?: string } } })
+        ?.response?.data
+      const apiErrors = responseData?.errors ?? {}
       setErrors(apiErrors)
+      if (Object.keys(apiErrors).length === 0) {
+        setGeneralError(responseData?.message ?? 'Could not create account. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -112,6 +118,12 @@ export default function RegisterPage() {
               aria-required="true"
             />
           </div>
+
+          {generalError && (
+            <p className="form-error" role="alert" aria-live="assertive">
+              {generalError}
+            </p>
+          )}
 
           <button
             type="submit"

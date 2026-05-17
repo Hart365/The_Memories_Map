@@ -1,7 +1,12 @@
 {
     "name": "hart365/memories-map-api",
     "description": "Memories Map – Laravel PHP backend API",
-    "keywords": ["laravel", "framework", "memories", "map"],
+    "keywords": [
+        "laravel",
+        "framework",
+        "memories",
+        "map"
+    ],
     "license": "MIT",
     "type": "project",
     "require": {
@@ -10,8 +15,7 @@
         "laravel/sanctum": "^4.0",
         "intervention/image": "^3.0",
         "league/flysystem-local": "^3.0",
-        "guzzlehttp/guzzle": "^7.8",
-        "barryvdh/laravel-cors": "^2.0"
+        "guzzlehttp/guzzle": "^7.8"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

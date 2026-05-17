@@ -18,14 +18,14 @@ RUN apk add --no-cache \
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install \
-        pdo \
-        pdo_mysql \
-        mbstring \
-        exif \
-        pcntl \
-        bcmath \
-        gd \
-        opcache
+    pdo \
+    pdo_mysql \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    gd \
+    opcache
 
 # Install Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -34,7 +34,15 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/opcache.ini \
     && echo "opcache.validate_timestamps=1" >> /usr/local/etc/php/conf.d/opcache.ini
 
+# Configure PHP upload limits
+RUN echo "upload_max_filesize=512M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "post_max_size=512M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "max_execution_time=300" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "max_input_time=300" >> /usr/local/etc/php/conf.d/uploads.ini
+
 WORKDIR /var/www/memories-map/backend
 
 EXPOSE 9000
 CMD ["php-fpm"]
+

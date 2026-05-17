@@ -1,0 +1,208 @@
+/* LocationEditor – Modern, accessible location information editor */
+
+.locationSection {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: calc(var(--radius) * 1.5);
+  padding: 2rem;
+  margin-top: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.locationSection:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.icon {
+  font-size: 1.75rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  padding-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.searchSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: linear-gradient(135deg, 
+    color-mix(in srgb, var(--color-accent) 8%, var(--color-surface)),
+    color-mix(in srgb, var(--color-secondary) 8%, var(--color-surface))
+  );
+  border: 2px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+  border-radius: var(--radius);
+  margin-top: 0.5rem;
+}
+
+.searchSection button {
+  align-self: flex-start;
+}
+
+.searchHint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.searchHint strong {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.display {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.locationList {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+}
+
+.locationItem {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 1rem;
+  align-items: baseline;
+  padding: 0.75rem;
+  background: linear-gradient(135deg, 
+    color-mix(in srgb, var(--color-primary) 5%, var(--color-surface)),
+    color-mix(in srgb, var(--color-secondary) 5%, var(--color-surface))
+  );
+  border-radius: var(--radius);
+  border-left: 4px solid var(--color-accent);
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.locationItem:hover {
+  background: linear-gradient(135deg, 
+    color-mix(in srgb, var(--color-primary) 10%, var(--color-surface)),
+    color-mix(in srgb, var(--color-secondary) 10%, var(--color-surface))
+  );
+  border-left-color: var(--color-primary);
+}
+
+.locationLabel {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.locationValue {
+  font-size: 1rem;
+  color: var(--color-text);
+  margin: 0;
+  word-break: break-word;
+}
+
+.empty {
+  padding: 2rem;
+  text-align: center;
+  background: linear-gradient(135deg, 
+    color-mix(in srgb, var(--color-border) 20%, transparent),
+    color-mix(in srgb, var(--color-border) 10%, transparent)
+  );
+  border-radius: var(--radius);
+  border: 2px dashed var(--color-border);
+}
+
+.emptyText {
+  margin: 0;
+  color: color-mix(in srgb, var(--color-text) 70%, var(--color-bg));
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .locationSection {
+    padding: 1.5rem;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .heading {
+    font-size: 1.25rem;
+  }
+
+  .locationItem {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .locationSection {
+    border-width: 3px;
+  }
+
+  .locationItem {
+    border-left-width: 6px;
+  }
+
+  .empty {
+    border-width: 3px;
+  }
+}
+
+/* Dark mode considerations (if theme supports it) */
+@media (prefers-color-scheme: dark) {
+  .locationSection {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .locationSection:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+}

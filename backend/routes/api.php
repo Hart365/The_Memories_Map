@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\NoteController;
 use App\Http\Controllers\Api\GuestController;
 use App\Http\Controllers\Api\ThemeController;
 use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\GeocodingController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -22,6 +23,10 @@ Route::prefix('auth')->group(function () {
     Route::post('/guest-login', [AuthController::class, 'guestLogin']);
 });
 
+// Token-authenticated media routes for <img>/<video> tags
+Route::get('/maps/{map}/media/{media}/file-token', [MediaController::class, 'serveFileToken']);
+Route::get('/maps/{map}/media/{media}/thumb-token', [MediaController::class, 'serveThumbnailToken']);
+
 // ── Authenticated user routes ─────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -36,6 +41,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Colour themes (read-only for all, managed by admin seeder)
     Route::get('/themes', [ThemeController::class, 'index']);
 
+    // Geocoding service (forward & reverse geocoding)
+    Route::get('/geocode', [GeocodingController::class, 'geocode'])
+        ->middleware(\App\Http\Middleware\LogGeocodingRequests::class);
+
     // Memories Maps (owner)
     Route::apiResource('maps', MapController::class);
     Route::put('/maps/{map}/theme', [MapController::class, 'updateTheme']);
@@ -46,6 +55,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/maps/{map}/media/{media}',     [MediaController::class, 'show']);
     Route::put('/maps/{map}/media/{media}',     [MediaController::class, 'update']);
     Route::delete('/maps/{map}/media/{media}',  [MediaController::class, 'destroy']);
+    Route::post('/maps/{map}/media/{media}/rescan-location', [MediaController::class, 'rescanLocation']);
+    Route::post('/maps/{map}/media/rescan-locations', [MediaController::class, 'rescanMapLocations']);
     Route::get('/maps/{map}/media/{media}/file', [MediaController::class, 'serveFile']);
     Route::get('/maps/{map}/media/{media}/thumb', [MediaController::class, 'serveThumbnail']);
 

@@ -31,6 +31,28 @@ A web application that links a library of photos and videos to an interactive ma
 
 ---
 
+## Quick Start (Windows)
+
+Run these commands from PowerShell in the project root:
+
+```powershell
+# 1. Copy backend env
+Copy-Item backend/.env.example backend/.env
+
+# 2. Start services
+docker compose up -d --build
+
+# 3. First-time setup
+docker compose exec app php /var/www/memories-map/backend/artisan key:generate --force
+docker compose exec app php /var/www/memories-map/backend/artisan migrate --seed --force
+```
+
+App URLs:
+- Frontend: http://localhost:5173
+- API: http://localhost:8080/api
+
+---
+
 ## Local Development (Docker)
 
 ### Prerequisites
@@ -50,9 +72,29 @@ cp backend/.env.example backend/.env
 docker compose up -d --build
 
 # 3. First-time: generate app key and run migrations
-docker compose exec app php artisan key:generate
-docker compose exec app php artisan migrate --seed
+docker compose exec app php /var/www/memories-map/backend/artisan key:generate --force
+docker compose exec app php /var/www/memories-map/backend/artisan migrate --seed --force
 ```
+
+### Windows PowerShell commands
+
+```powershell
+# 1. Copy backend env
+Copy-Item backend/.env.example backend/.env
+
+# 2. Start all services
+docker compose up -d --build
+
+# 3. First-time: generate app key and run migrations
+docker compose exec app php /var/www/memories-map/backend/artisan key:generate --force
+docker compose exec app php /var/www/memories-map/backend/artisan migrate --seed --force
+```
+
+### Troubleshooting
+
+- Error: `could not open input file: artisan`
+	- Cause: running `php artisan ...` from a working directory where the `artisan` file is not present.
+	- Fix: use the full container path shown above: `php /var/www/memories-map/backend/artisan ...`
 
 | Service | URL |
 |---------|-----|

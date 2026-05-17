@@ -2,9 +2,12 @@ import axios from 'axios'
 import { useAuthStore } from '@/store/authStore'
 
 const api = axios.create({
+  // Always use same-origin API path. In dev, Vite proxies /api to backend.
+  // This avoids cross-origin upload/network issues in the browser.
   baseURL: '/api',
   headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-  withCredentials: true,
+  // Token auth is sent via Authorization header; cookies are not required.
+  withCredentials: false,
 })
 
 // Attach bearer token from store

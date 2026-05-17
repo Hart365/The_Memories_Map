@@ -19,7 +19,14 @@ class MediaFile extends Model
         'latitude',
         'longitude',
         'altitude',
+        'location_name',
+        'location_address',
+        'location_city',
+        'location_country',
         'captured_at',
+        'timezone',
+        'timezone_offset',
+        'captured_at_local',
         'camera_make',
         'camera_model',
         'width',
@@ -39,6 +46,7 @@ class MediaFile extends Model
             'longitude'        => 'float',
             'altitude'         => 'float',
             'captured_at'      => 'datetime',
+            'captured_at_local' => 'datetime',
             'processed_at'     => 'datetime',
             'exif_json'        => 'array',
             'user_tags'        => 'array',
@@ -46,6 +54,7 @@ class MediaFile extends Model
             'width'            => 'integer',
             'height'           => 'integer',
             'duration_seconds' => 'float',
+            'timezone_offset'  => 'integer',
         ];
     }
 

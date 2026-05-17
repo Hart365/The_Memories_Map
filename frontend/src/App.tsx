@@ -6,6 +6,7 @@ import RegisterPage from '@/pages/RegisterPage'
 import DashboardPage from '@/pages/DashboardPage'
 import MapViewPage from '@/pages/MapViewPage'
 import TimelinePage from '@/pages/TimelinePage'
+import GalleryPage from '@/pages/GalleryPage'
 import MediaViewerPage from '@/pages/MediaViewerPage'
 import SettingsPage from '@/pages/SettingsPage'
 import GuestAccessPage from '@/pages/GuestAccessPage'
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/maps/:mapId" element={<MapViewPage />} />
           <Route path="/maps/:mapId/timeline" element={<TimelinePage />} />
+          <Route path="/maps/:mapId/gallery" element={<GalleryPage />} />
           <Route path="/maps/:mapId/media/:mediaId" element={<MediaViewerPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

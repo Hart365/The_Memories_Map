@@ -25,9 +25,21 @@
   text-decoration: none;
   font-weight: 700;
   font-size: 1.125rem;
+  transition: opacity var(--transition-fast), text-decoration var(--transition-fast);
 }
 
-.brand:hover { text-decoration: underline; }
+.brand:hover { 
+  color: #fff;
+  opacity: 0.9;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+.brand:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
 
 .navList {
   display: flex;
@@ -42,9 +54,25 @@
   color: #fff;
   text-decoration: none;
   font-weight: 500;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  transition: background-color var(--transition-fast), text-decoration var(--transition-fast);
+  position: relative;
 }
 
-.navList a:hover { text-decoration: underline; }
+.navList a:hover { 
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.15);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.navList a:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 
 .main {
   min-height: calc(100vh - 3.5rem - 3rem);
@@ -59,4 +87,24 @@
   text-align: center;
   padding: 0.75rem 1rem;
   font-size: 0.875rem;
+}
+
+.footer a {
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  transition: opacity var(--transition-fast), text-decoration-thickness var(--transition-fast);
+}
+
+.footer a:hover {
+  color: #fff;
+  opacity: 0.9;
+  text-decoration-thickness: 2px;
+}
+
+.footer a:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
