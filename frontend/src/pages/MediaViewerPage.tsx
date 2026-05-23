@@ -38,6 +38,7 @@ import LocationEditor from '@/components/media/LocationEditor'
 import MediaUploader from '@/components/media/MediaUploader'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { formatUserDate } from '@/lib/dateFormatting'
 
 export default function MediaViewerPage() {
   const { mapId, mediaId } = useParams<{ mapId: string; mediaId: string }>()
@@ -184,7 +185,7 @@ export default function MediaViewerPage() {
             {media.captured_at && (
               <Text size="sm">
                 <Text component="span" fw={700}>Captured:</Text>{' '}
-                {new Date(media.captured_at_local || media.captured_at).toLocaleString()}
+                {formatUserDate(media.captured_at_local || media.captured_at)}
                 {media.captured_at_local && media.timezone ? ` (${media.timezone})` : ''}
               </Text>
             )}

@@ -17,6 +17,7 @@ class User extends Authenticatable
         'email',
         'password',
         'default_timezone',
+        'date_format',
     ];
 
     protected $hidden = [

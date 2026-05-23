@@ -49,6 +49,7 @@ import MapLayers from '@/components/map/MapLayers'
 import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { buildTimelineColorMap } from '@/lib/timelineColors'
 import { YEAR_BAR_COLORS } from '@/styles/mantine-theme'
+import { formatUserDate } from '@/lib/dateFormatting'
 
 const guestSessionKeys = {
   accessToken: 'guest_access_token',
@@ -915,7 +916,7 @@ export default function GuestAccessPage() {
                             <Group gap={4} mt={2} wrap="nowrap">
                               <IconClock size={12} color={brand} aria-hidden />
                               <Text size="xs" c="dimmed" lineClamp={1}>
-                                {when ? new Date(when).toLocaleString() : 'Date unavailable'}
+                                {formatUserDate(when)}
                               </Text>
                             </Group>
                           </Box>
@@ -960,7 +961,7 @@ export default function GuestAccessPage() {
               <Paper p="sm" radius="md" style={{ backgroundColor: surface, border }}>
                 <Text size="sm"><Text component="span" fw={700}>File:</Text> {activeMedia.original_name}</Text>
                 {activeMedia.captured_at && (
-                  <Text size="sm"><Text component="span" fw={700}>Captured:</Text> {new Date(activeMedia.captured_at_local || activeMedia.captured_at).toLocaleString()}</Text>
+                  <Text size="sm"><Text component="span" fw={700}>Captured:</Text> {formatUserDate(activeMedia.captured_at_local || activeMedia.captured_at)}</Text>
                 )}
                 {(activeMedia.latitude !== null && activeMedia.longitude !== null) && (
                   <Text size="sm"><Text component="span" fw={700}>Coordinates:</Text> {activeMedia.latitude.toFixed(5)}, {activeMedia.longitude.toFixed(5)}</Text>

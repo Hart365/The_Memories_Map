@@ -11,9 +11,18 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rule;
 
 class ProfileController extends Controller
 {
+    private const ALLOWED_DATE_FORMATS = [
+        'YYYY-MM-DD',
+        'DD/MM/YY',
+        'MM/DD/YY',
+        'DD/MM/YYYY',
+        'MM/DD/YYYY',
+    ];
+
         public function timezones(): JsonResponse
         {
             $timezones = Cache::remember('profile:timezones:v1', now()->addHours(12), function () {
@@ -55,7 +64,7 @@ class ProfileController extends Controller
 
     public function show(Request $request): JsonResponse
     {
-        return response()->json($request->user()->only('id', 'name', 'email', 'default_timezone', 'created_at'));
+        return response()->json($request->user()->only('id', 'name', 'email', 'default_timezone', 'date_format', 'created_at'));
     }
 
     public function update(Request $request): JsonResponse
@@ -64,11 +73,12 @@ class ProfileController extends Controller
             'name'  => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'email:rfc,dns', 'max:255', 'unique:users,email,' . $request->user()->id],
             'default_timezone' => ['sometimes', 'timezone'],
+            'date_format' => ['sometimes', 'string', Rule::in(self::ALLOWED_DATE_FORMATS)],
         ]);
 
         $request->user()->update($validated);
 
-        return response()->json($request->user()->fresh()->only('id', 'name', 'email', 'default_timezone'));
+        return response()->json($request->user()->fresh()->only('id', 'name', 'email', 'default_timezone', 'date_format', 'created_at'));
     }
 
     public function changePassword(Request $request): JsonResponse

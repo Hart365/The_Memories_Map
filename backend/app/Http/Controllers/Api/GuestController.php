@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MapGuest;
 use App\Models\MemoriesMap;
 use App\Notifications\GuestInviteNotification;
+use App\Services\MailSettingsService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,8 @@ use Illuminate\Support\Str;
 class GuestController extends Controller
 {
     use AuthorizesRequests;
+
+    public function __construct(private readonly MailSettingsService $mailSettings) {}
 
     public function index(Request $request, MemoriesMap $map): JsonResponse
     {
@@ -82,6 +85,7 @@ class GuestController extends Controller
 
         $mailFailed = false;
         try {
+            $this->mailSettings->applyConfiguredMailer();
             $guest->notify(new GuestInviteNotification($map, $shareUrl, $expiresAt));
         } catch (\Throwable $e) {
             $mailFailed = true;
@@ -141,6 +145,7 @@ class GuestController extends Controller
         [$shareUrl, $expiresAt] = $this->rotateGuestShareLink($guest);
         $mailFailed = false;
         try {
+            $this->mailSettings->applyConfiguredMailer();
             $guest->notify(new GuestInviteNotification($map, $shareUrl, $expiresAt, isReset: true));
         } catch (\Throwable $e) {
             $mailFailed = true;

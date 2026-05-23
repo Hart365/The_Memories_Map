@@ -18,6 +18,7 @@ import api from '@/lib/api'
 import type { MapGuest, MemoriesMap } from '@/types'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { formatUserDate, formatUserDateTime } from '@/lib/dateFormatting'
 
 export default function DashboardPage() {
   const [createOpen, { open: openCreate, close: closeCreate }] = useDisclosure(false)
@@ -359,14 +360,14 @@ export default function DashboardPage() {
                     <Box>
                       <Text fw={700} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>{guest.email}</Text>
                       <Text size="xs" c="dimmed">
-                        Invited {new Date(guest.invited_at).toLocaleString()}
-                        {guest.last_accessed_at ? ` • Opened ${new Date(guest.last_accessed_at).toLocaleString()}` : ' • Not opened yet'}
+                        Invited {formatUserDateTime(guest.invited_at)}
+                        {guest.last_accessed_at ? ` • Opened ${formatUserDateTime(guest.last_accessed_at)}` : ' • Not opened yet'}
                       </Text>
                     </Box>
                     <Group gap="xs" wrap="wrap">
                       {guest.expires_at && (
                         <Badge variant="light" color="teal">
-                          Expires {new Date(guest.expires_at).toLocaleDateString()}
+                          Expires {formatUserDate(guest.expires_at)}
                         </Badge>
                       )}
                       <Tooltip label="Rotate secure link" withArrow>

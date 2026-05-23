@@ -27,6 +27,7 @@ import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { buildTimelineColorMap } from '@/lib/timelineColors'
 import { YEAR_BAR_COLORS } from '@/styles/mantine-theme'
+import { formatUserDate } from '@/lib/dateFormatting'
 
 const markerIconCache = new Map<string, L.DivIcon>()
 
@@ -814,7 +815,7 @@ export default function MapViewPage() {
                         <Text size="xs" c="dimmed" lineClamp={1}>{place}</Text>
                         <Group gap={4}>
                           <IconClock size={12} color={brand} aria-hidden />
-                          <Text size="xs" c="dimmed">{when ? new Date(when).toLocaleString() : 'Date unavailable'}</Text>
+                          <Text size="xs" c="dimmed">{formatUserDate(when)}</Text>
                         </Group>
                       </Stack>
                       </Box>

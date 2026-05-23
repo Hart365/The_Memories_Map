@@ -8,6 +8,9 @@ use App\Http\Controllers\Api\GuestController;
 use App\Http\Controllers\Api\ThemeController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\GeocodingController;
+use App\Http\Controllers\Api\AdminAuthController;
+use App\Http\Controllers\Api\AdminSettingsController;
+use App\Http\Controllers\Api\PublicSettingsController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -29,6 +32,20 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/guest-login', [AuthController::class, 'guestLogin']);
 Route::post('/guest-access/{token}', [AuthController::class, 'guestAccess']);
+Route::get('/public/settings', [PublicSettingsController::class, 'show']);
+
+Route::prefix('admin')->group(function () {
+    Route::post('/login', [AdminAuthController::class, 'login']);
+
+    Route::middleware('admin.auth')->group(function () {
+        Route::post('/logout', [AdminAuthController::class, 'logout']);
+        Route::get('/settings', [AdminSettingsController::class, 'show']);
+        Route::put('/settings', [AdminSettingsController::class, 'update']);
+        Route::post('/settings/test-mail', [AdminSettingsController::class, 'sendTest']);
+        Route::post('/settings/test-connection', [AdminSettingsController::class, 'testConnection']);
+        Route::post('/settings/reset-mail', [AdminSettingsController::class, 'resetMailToEnv']);
+    });
+});
 
 // Token-authenticated media routes for <img>/<video> tags
 Route::get('/maps/{map}/media/{media}/file-token', [MediaController::class, 'serveFileToken']);

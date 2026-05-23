@@ -6,6 +6,7 @@ interface AuthUser {
   name: string
   email: string
   default_timezone: string
+  date_format?: string
 }
 
 interface AuthState {

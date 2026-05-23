@@ -23,6 +23,7 @@ import BulkEditModal from '@/components/media/BulkEditModal'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { buildTimelineColorMap } from '@/lib/timelineColors'
+import { formatUserDate, formatUserDateTime } from '@/lib/dateFormatting'
 
 type DrillLevel = 'year' | 'month' | 'day' | 'hour'
 
@@ -624,7 +625,7 @@ export default function TimelinePage() {
                             onKeyDown={(e) => e.key === 'Enter' && navigate(`/maps/${mapId}/media/${m.id}`)}
                             tabIndex={0}
                             role="button"
-                            aria-label={`${m.original_name}. Captured ${m.captured_at ? format(parseISO(m.captured_at), 'h:mm a') : ''}`}
+                            aria-label={`${m.original_name}. Captured ${formatUserDateTime(m.captured_at_local || m.captured_at, '')}`}
                           >
                           {m.thumbnail_name ? (
                             <img src={mediaThumbUrl(mapId!, m.id)}
@@ -645,7 +646,7 @@ export default function TimelinePage() {
                             </Text>
                             {m.captured_at && (
                               <Text size="xs" c="dimmed">
-                                {format(parseISO(m.captured_at_local || m.captured_at), 'PPp')}
+                                {formatUserDate(m.captured_at_local || m.captured_at)}
                               </Text>
                             )}
                           </Box>

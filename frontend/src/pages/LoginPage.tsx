@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Container,
@@ -88,6 +88,7 @@ const FEATURE_CARD_BACKGROUNDS = [
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
+  const [allowRegistration, setAllowRegistration] = useState(true)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
@@ -119,6 +120,18 @@ export default function LoginPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    void api.get('/public/settings')
+      .then((res) => {
+        if (typeof res.data?.allow_new_user_registration === 'boolean') {
+          setAllowRegistration(res.data.allow_new_user_registration)
+        }
+      })
+      .catch(() => {
+        setAllowRegistration(true)
+      })
+  }, [])
 
   const brand = isDark ? '#22d3e0' : '#005f63'
   const bodyText = isDark ? '#d7e3ec' : '#334155'
@@ -320,19 +333,30 @@ export default function LoginPage() {
                     </Stack>
                   </form>
 
-                  <Divider label="New here?" labelPosition="center" styles={{ label: { color: muted } }} />
+                  {allowRegistration && (
+                    <>
+                      <Divider label="New here?" labelPosition="center" styles={{ label: { color: muted } }} />
 
-                  <Button
-                    variant="default"
-                    styles={getMapSectionButtonStyles('gallery')}
-                    fullWidth
-                    radius="md"
-                    component={Link}
-                    to="/register"
-                    leftSection={<IconUsers size={18} aria-hidden />}
-                  >
-                    Create a free account
-                  </Button>
+                      <Button
+                        variant="default"
+                        styles={getMapSectionButtonStyles('gallery')}
+                        fullWidth
+                        radius="md"
+                        component={Link}
+                        to="/register"
+                        leftSection={<IconUsers size={18} aria-hidden />}
+                      >
+                        Create a free account
+                      </Button>
+                    </>
+                  )}
+
+                  <Text size="xs" ta="center" style={{ color: muted }}>
+                    Site administrator?{' '}
+                    <Anchor component={Link} to="/admin" size="xs" style={{ color: brand, fontWeight: 700 }}>
+                      Open Admin Console
+                    </Anchor>
+                  </Text>
                 </Stack>
               </Paper>
             </Grid.Col>
@@ -382,9 +406,11 @@ export default function LoginPage() {
           <Box ta="center" py="md">
             <Text size="sm" style={{ color: muted }}>
               &copy; {new Date().getFullYear()} Memories Map.{' '}
-              <Anchor component={Link} to="/register" size="sm" style={{ color: brand, fontWeight: 600 }}>
-                Create an account
-              </Anchor>
+              {allowRegistration && (
+                <Anchor component={Link} to="/register" size="sm" style={{ color: brand, fontWeight: 600 }}>
+                  Create an account
+                </Anchor>
+              )}
             </Text>
           </Box>
         </Stack>

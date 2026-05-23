@@ -12,6 +12,7 @@ import api from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { DATE_FORMAT_OPTIONS, type UserDateFormat } from '@/lib/dateFormatting'
 
 interface TimezoneOption {
   value: string
@@ -41,11 +42,13 @@ export default function SettingsPage() {
       name: storeUser?.name ?? '',
       email: storeUser?.email ?? '',
       default_timezone: storeUser?.default_timezone ?? 'Etc/UTC',
+      date_format: (storeUser?.date_format as UserDateFormat | undefined) ?? 'YYYY-MM-DD',
     },
     validate: {
       name: (v) => v.trim().length < 2 ? 'Name must be at least 2 characters' : null,
       email: (v) => /^\S+@\S+\.\S+$/.test(v) ? null : 'Invalid email',
       default_timezone: (v) => v.trim().length < 1 ? 'Timezone is required' : null,
+      date_format: (v) => v.trim().length < 1 ? 'Date format is required' : null,
     },
   })
 
@@ -59,7 +62,7 @@ export default function SettingsPage() {
   })
 
   const updateProfile = useMutation({
-    mutationFn: (vals: { name: string; email: string; default_timezone: string }) => api.put('/profile', vals),
+    mutationFn: (vals: { name: string; email: string; default_timezone: string; date_format: UserDateFormat }) => api.put('/profile', vals),
     onSuccess: (res) => {
       setAuth(useAuthStore.getState().token!, res.data)
       notifications.show({ message: 'Profile updated!', color: 'teal' })
@@ -113,6 +116,14 @@ export default function SettingsPage() {
               aria-label="Default timezone"
               disabled={timezonesLoading}
               {...profileForm.getInputProps('default_timezone')}
+            />
+            <Select
+              label="Date Format"
+              description="Controls how dates are shown throughout the app."
+              required
+              data={DATE_FORMAT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              aria-label="Date format"
+              {...profileForm.getInputProps('date_format')}
             />
             <Group justify="flex-end">
               <Button type="submit" variant="default" styles={getMapSectionButtonStyles('consolidated', 'solid')} loading={updateProfile.isPending}>Save Profile</Button>

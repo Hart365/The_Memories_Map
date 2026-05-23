@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Container,
@@ -28,6 +28,7 @@ import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null)
+  const [allowRegistration, setAllowRegistration] = useState(true)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
@@ -47,6 +48,11 @@ export default function RegisterPage() {
   })
 
   const handleSubmit = async (values: typeof form.values) => {
+    if (!allowRegistration) {
+      setError('New user registration is currently disabled by the site administrator.')
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
@@ -64,6 +70,18 @@ export default function RegisterPage() {
 
   const brand = isDark ? '#22d3e0' : '#003d40'
   const bodyText = isDark ? '#d7e3ec' : '#334155'
+    useEffect(() => {
+      void api.get('/public/settings')
+        .then((res) => {
+          if (typeof res.data?.allow_new_user_registration === 'boolean') {
+            setAllowRegistration(res.data.allow_new_user_registration)
+          }
+        })
+        .catch(() => {
+          setAllowRegistration(true)
+        })
+    }, [])
+
   const formPanelBackground = isDark
     ? 'linear-gradient(180deg, rgba(26,32,40,0.98) 0%, rgba(17,27,35,0.98) 100%)'
     : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(252,255,255,0.98) 100%)'
@@ -147,56 +165,62 @@ export default function RegisterPage() {
               </Alert>
             )}
 
-            <form onSubmit={form.onSubmit(handleSubmit)} noValidate>
-              <Stack gap="md">
-                <TextInput
-                  label="Full name (required)"
-                  placeholder="Jane Smith"
-                  required
-                  withAsterisk={false}
-                  {...form.getInputProps('name')}
-                />
-                <TextInput
-                  label="Email address (required)"
-                  type="email"
-                  placeholder="you@example.com"
-                  required
-                  withAsterisk={false}
-                  autoComplete="email"
-                  {...form.getInputProps('email')}
-                />
-                <PasswordInput
-                  label="Password (required)"
-                  description="At least 8 characters"
-                  styles={{ description: { color: muted } }}
-                  placeholder="Create a strong password"
-                  required
-                  withAsterisk={false}
-                  autoComplete="new-password"
-                  {...form.getInputProps('password')}
-                />
-                <PasswordInput
-                  label="Confirm password (required)"
-                  placeholder="Repeat your password"
-                  required
-                  withAsterisk={false}
-                  autoComplete="new-password"
-                  {...form.getInputProps('password_confirmation')}
-                />
-                <Button
-                  type="submit"
-                  variant="default"
-                  styles={getMapSectionButtonStyles('consolidated', 'solid')}
-                  fullWidth
-                  loading={loading}
-                  leftSection={<IconUserPlus size={18} aria-hidden />}
-                  size="md"
-                  radius="md"
-                >
-                  Create account
-                </Button>
-              </Stack>
-            </form>
+            {allowRegistration ? (
+              <form onSubmit={form.onSubmit(handleSubmit)} noValidate>
+                <Stack gap="md">
+                  <TextInput
+                    label="Full name (required)"
+                    placeholder="Jane Smith"
+                    required
+                    withAsterisk={false}
+                    {...form.getInputProps('name')}
+                  />
+                  <TextInput
+                    label="Email address (required)"
+                    type="email"
+                    placeholder="you@example.com"
+                    required
+                    withAsterisk={false}
+                    autoComplete="email"
+                    {...form.getInputProps('email')}
+                  />
+                  <PasswordInput
+                    label="Password (required)"
+                    description="At least 8 characters"
+                    styles={{ description: { color: muted } }}
+                    placeholder="Create a strong password"
+                    required
+                    withAsterisk={false}
+                    autoComplete="new-password"
+                    {...form.getInputProps('password')}
+                  />
+                  <PasswordInput
+                    label="Confirm password (required)"
+                    placeholder="Repeat your password"
+                    required
+                    withAsterisk={false}
+                    autoComplete="new-password"
+                    {...form.getInputProps('password_confirmation')}
+                  />
+                  <Button
+                    type="submit"
+                    variant="default"
+                    styles={getMapSectionButtonStyles('consolidated', 'solid')}
+                    fullWidth
+                    loading={loading}
+                    leftSection={<IconUserPlus size={18} aria-hidden />}
+                    size="md"
+                    radius="md"
+                  >
+                    Create account
+                  </Button>
+                </Stack>
+              </form>
+            ) : (
+              <Alert icon={<IconAlertCircle size={16} />} color="yellow" variant="light" role="status">
+                New user registration is currently disabled by the site administrator.
+              </Alert>
+            )}
 
             <Divider label="Already have an account?" labelPosition="center" styles={{ label: { color: muted } }} />
             <Button

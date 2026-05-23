@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Polyline, CircleMarker, Tooltip } from 'react-leaflet'
-import { format, parseISO } from 'date-fns'
 import type { MediaFile } from '@/types'
+import { formatUserDateTime } from '@/lib/dateFormatting'
 
 interface RouteVisualizationProps {
   media: MediaFile[]
@@ -61,7 +61,7 @@ export default function RouteVisualization({ media }: RouteVisualizationProps) {
           <div style={{ textAlign: 'center', fontWeight: 600 }}>
             <div style={{ fontSize: '0.75rem', color: '#059669' }}>START</div>
             <div style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>
-              {format(parseISO(startPoint.captured_at!), 'MMM d, h:mm a')}
+              {formatUserDateTime(startPoint.captured_at_local || startPoint.captured_at)}
             </div>
             {startPoint.location_name && (
               <div style={{ fontSize: '0.8125rem', color: '#666', marginTop: '0.125rem' }}>
@@ -90,7 +90,7 @@ export default function RouteVisualization({ media }: RouteVisualizationProps) {
             <div style={{ textAlign: 'center', fontSize: '0.875rem' }}>
               <div style={{ fontWeight: 600, color: '#f59e0b' }}>Stop {index + 1}</div>
               <div style={{ marginTop: '0.25rem' }}>
-                {format(parseISO(point.captured_at!), 'MMM d, h:mm a')}
+                {formatUserDateTime(point.captured_at_local || point.captured_at)}
               </div>
               {point.location_name && (
                 <div style={{ fontSize: '0.8125rem', color: '#666', marginTop: '0.125rem' }}>
@@ -118,7 +118,7 @@ export default function RouteVisualization({ media }: RouteVisualizationProps) {
           <div style={{ textAlign: 'center', fontWeight: 600 }}>
             <div style={{ fontSize: '0.75rem', color: '#dc2626' }}>END</div>
             <div style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>
-              {format(parseISO(endPoint.captured_at!), 'MMM d, h:mm a')}
+              {formatUserDateTime(endPoint.captured_at_local || endPoint.captured_at)}
             </div>
             {endPoint.location_name && (
               <div style={{ fontSize: '0.8125rem', color: '#666', marginTop: '0.125rem' }}>

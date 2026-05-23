@@ -10,12 +10,21 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use App\Models\MapGuest;
+use App\Services\SiteSettingsService;
 use App\Services\TimezoneService;
 
 class AuthController extends Controller
 {
+    public function __construct(private readonly SiteSettingsService $siteSettings) {}
+
     public function register(Request $request): JsonResponse
     {
+        if (! $this->siteSettings->isRegistrationAllowed()) {
+            return response()->json([
+                'message' => 'New user registration is currently disabled by the site administrator.',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'name'     => ['required', 'string', 'max:255'],
             'email'    => ['required', 'email:rfc,dns', 'max:255', 'unique:users,email'],
@@ -27,12 +36,13 @@ class AuthController extends Controller
             'email'    => $validated['email'],
             'password' => Hash::make($validated['password']),
             'default_timezone' => TimezoneService::DEFAULT_TIMEZONE,
+            'date_format' => 'YYYY-MM-DD',
         ]);
 
         $token = $user->createToken('api-token', ['*'], now()->addDays(30))->plainTextToken;
 
         return response()->json([
-            'user'  => $user->only('id', 'name', 'email', 'default_timezone'),
+            'user'  => $user->only('id', 'name', 'email', 'default_timezone', 'date_format'),
             'token' => $token,
         ], 201);
     }
@@ -54,7 +64,7 @@ class AuthController extends Controller
         $token = $user->createToken('api-token', ['*'], now()->addDays(30))->plainTextToken;
 
         return response()->json([
-            'user'  => $user->only('id', 'name', 'email', 'default_timezone'),
+            'user'  => $user->only('id', 'name', 'email', 'default_timezone', 'date_format'),
             'token' => $token,
         ]);
     }

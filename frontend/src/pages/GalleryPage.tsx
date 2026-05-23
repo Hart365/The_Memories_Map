@@ -23,6 +23,7 @@ import MediaUploader from '@/components/media/MediaUploader'
 import BulkEditModal from '@/components/media/BulkEditModal'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { formatUserDate } from '@/lib/dateFormatting'
 
 export default function GalleryPage() {
   const { mapId } = useParams<{ mapId: string }>()
@@ -353,7 +354,7 @@ export default function GalleryPage() {
                     <Group gap={4} mt={2} wrap="nowrap">
                       <IconClock size={12} color={brand} aria-hidden />
                       <Text size="xs" c="dimmed" lineClamp={1}>
-                        {when ? new Date(when).toLocaleString() : 'Date unavailable'}
+                        {formatUserDate(when)}
                       </Text>
                     </Group>
                   </Box>
