@@ -23,6 +23,11 @@ Route::prefix('auth')->group(function () {
     Route::post('/guest-login', [AuthController::class, 'guestLogin']);
 });
 
+// Legacy auth aliases kept for older frontend bundles that still call /api/* directly.
+Route::post('/register', [AuthController::class, 'register']);
+Route::post('/login', [AuthController::class, 'login']);
+Route::post('/guest-login', [AuthController::class, 'guestLogin']);
+
 // Token-authenticated media routes for <img>/<video> tags
 Route::get('/maps/{map}/media/{media}/file-token', [MediaController::class, 'serveFileToken']);
 Route::get('/maps/{map}/media/{media}/thumb-token', [MediaController::class, 'serveThumbnailToken']);
@@ -34,6 +39,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Profile
     Route::get('/profile',  [ProfileController::class, 'show']);
+    Route::get('/profile/timezones',  [ProfileController::class, 'timezones']);
     Route::put('/profile',  [ProfileController::class, 'update']);
     Route::put('/profile/password', [ProfileController::class, 'changePassword']);
     Route::delete('/profile', [ProfileController::class, 'destroy']);

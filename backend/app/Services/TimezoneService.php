@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 
 class TimezoneService
 {
+    public const DEFAULT_TIMEZONE = 'Etc/UTC';
+
     /**
      * Get timezone information from coordinates.
      * Returns timezone identifier (e.g., 'America/New_York') and offset in minutes.
@@ -157,5 +159,64 @@ class TimezoneService
         $localTime = clone $utcTime;
         $localTime->modify(($offsetMinutes >= 0 ? '+' : '') . $offsetMinutes . ' minutes');
         return $localTime;
+    }
+
+    /**
+     * Parse camera-local EXIF time in the user's default timezone and convert to UTC.
+     */
+    public function parseCameraLocalToUtc(string $cameraLocal, ?string $sourceTimezone): ?\Carbon\Carbon
+    {
+        $tz = $sourceTimezone ?: self::DEFAULT_TIMEZONE;
+
+        try {
+            $sourceTime = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $cameraLocal, $tz);
+            return $sourceTime->copy()->setTimezone('UTC');
+        } catch (\Throwable $e) {
+            Log::warning('Failed to parse camera-local datetime', [
+                'camera_local' => $cameraLocal,
+                'source_timezone' => $tz,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Recalculate UTC and location-local timestamps from a source wall clock time.
+     *
+     * @return array{captured_at_utc:\Carbon\Carbon,captured_at_local:\Carbon\Carbon,location_offset_minutes:int,source_offset_minutes:int,difference_minutes:int}|null
+     */
+    public function recalculateFromSourceWallTime(
+        string $sourceWallTime,
+        ?string $sourceTimezone,
+        ?string $locationTimezone
+    ): ?array {
+        $sourceTz = $sourceTimezone ?: self::DEFAULT_TIMEZONE;
+        $targetTz = $locationTimezone ?: $sourceTz;
+
+        try {
+            $sourceLocal = \Carbon\Carbon::createFromFormat('Y-m-d H:i:s', $sourceWallTime, $sourceTz);
+            $capturedAtUtc = $sourceLocal->copy()->setTimezone('UTC');
+            $capturedAtLocal = $capturedAtUtc->copy()->setTimezone($targetTz);
+
+            $sourceOffset = $sourceLocal->utcOffset();
+            $locationOffset = $capturedAtLocal->utcOffset();
+
+            return [
+                'captured_at_utc' => $capturedAtUtc,
+                'captured_at_local' => $capturedAtLocal,
+                'location_offset_minutes' => $locationOffset,
+                'source_offset_minutes' => $sourceOffset,
+                'difference_minutes' => $locationOffset - $sourceOffset,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('Failed to recalculate timezone-aware timestamps', [
+                'source_wall_time' => $sourceWallTime,
+                'source_timezone' => $sourceTz,
+                'location_timezone' => $targetTz,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
     }
 }

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\MediaProcessingService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Validation\Rules\File;
@@ -50,10 +51,18 @@ class MediaController extends Controller
                 File::types(['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'mp4', 'mov', 'avi', 'mkv', 'm4v'])
                     ->max($maxMb * 1024),
             ],
+            'duplicate_options' => ['nullable', 'array'],
+            'duplicate_options.filename' => ['nullable', 'boolean'],
+            'duplicate_options.size' => ['nullable', 'boolean'],
+            'duplicate_options.capture_date' => ['nullable', 'boolean'],
+            'duplicate_options.gps' => ['nullable', 'boolean'],
+            'duplicate_options.camera_make' => ['nullable', 'boolean'],
+            'duplicate_options.camera_model' => ['nullable', 'boolean'],
         ]);
 
         $created = [];
         $duplicates = [];
+        $duplicateOptions = $this->normalizeDuplicateOptions($request->input('duplicate_options', []));
 
         // Get existing media files with key attributes for duplicate detection
         $existingMedia = $map->mediaFiles()
@@ -62,10 +71,9 @@ class MediaController extends Controller
 
         foreach ($request->file('files') as $upload) {
             $originalName = $upload->getClientOriginalName();
-            $fileSize = $upload->getSize();
             
             // Check if this is a true duplicate
-            $isDuplicate = $this->isDuplicate($upload, $existingMedia, $created);
+            $isDuplicate = $this->isDuplicate($upload, $existingMedia, $created, $duplicateOptions);
             
             if ($isDuplicate) {
                 $duplicates[] = $originalName;
@@ -88,78 +96,159 @@ class MediaController extends Controller
      * Check if an uploaded file is a true duplicate based on multiple criteria.
      * A file is only considered a duplicate if it matches on multiple key attributes.
      */
-    private function isDuplicate(UploadedFile $upload, $existingMedia, array $currentBatch): bool
+    private function isDuplicate(UploadedFile $upload, $existingMedia, array $currentBatch, array $options): bool
     {
+        $enabledCount = count(array_filter($options));
+        if ($enabledCount === 0) {
+            return false;
+        }
+
         $filename = strtolower($upload->getClientOriginalName());
         $fileSize = $upload->getSize();
         
         // Extract EXIF data from upload to compare
-        $uploadExif = @exif_read_data($upload->getRealPath());
-        $uploadCapturedAt = $uploadExif['DateTimeOriginal'] ?? $uploadExif['DateTime'] ?? null;
-        $uploadLat = $this->getGpsCoordinate($uploadExif, 'GPSLatitude', 'GPSLatitudeRef');
-        $uploadLon = $this->getGpsCoordinate($uploadExif, 'GPSLongitude', 'GPSLongitudeRef');
-        $uploadCameraMake = $uploadExif['Make'] ?? null;
-        $uploadCameraModel = $uploadExif['Model'] ?? null;
+        $needsExif = $options['capture_date'] || $options['gps'] || $options['camera_make'] || $options['camera_model'];
+        $uploadExif = $needsExif ? @exif_read_data($upload->getRealPath()) : null;
+        $uploadCapturedAt = is_array($uploadExif)
+            ? ($uploadExif['DateTimeOriginal'] ?? $uploadExif['DateTime'] ?? null)
+            : null;
+        $uploadLat = $options['gps'] ? $this->getGpsCoordinate($uploadExif, 'GPSLatitude', 'GPSLatitudeRef') : null;
+        $uploadLon = $options['gps'] ? $this->getGpsCoordinate($uploadExif, 'GPSLongitude', 'GPSLongitudeRef') : null;
+        $uploadCameraMake = is_array($uploadExif) ? ($uploadExif['Make'] ?? null) : null;
+        $uploadCameraModel = is_array($uploadExif) ? ($uploadExif['Model'] ?? null) : null;
+
+        $requiredMatches = $enabledCount <= 2
+            ? $enabledCount
+            : max(2, (int) ceil($enabledCount * 0.6));
         
         // Check against existing media in database
         foreach ($existingMedia as $existing) {
-            $matchScore = 0;
+            $matchCount = 0;
             
             // Compare filename (case-insensitive)
-            if (strtolower($existing->original_name) === $filename) {
-                $matchScore++;
+            if ($options['filename'] && strtolower($existing->original_name) === $filename) {
+                $matchCount++;
             }
             
             // Compare file size (exact match)
-            if ($existing->size_bytes === $fileSize) {
-                $matchScore++;
+            if ($options['size'] && $existing->size_bytes === $fileSize) {
+                $matchCount++;
             }
             
             // Compare capture date (if available)
-            if ($uploadCapturedAt && $existing->captured_at) {
+            if ($options['capture_date'] && $uploadCapturedAt && $existing->captured_at) {
                 $existingDate = $existing->captured_at->format('Y:m:d H:i:s');
                 if ($uploadCapturedAt === $existingDate) {
-                    $matchScore += 2; // Date is a strong indicator
+                    $matchCount++;
                 }
             }
             
             // Compare GPS coordinates (within 0.0001 degrees ~ 11 meters)
-            if ($uploadLat && $uploadLon && $existing->latitude && $existing->longitude) {
+            if ($options['gps'] && $uploadLat !== null && $uploadLon !== null && $existing->latitude !== null && $existing->longitude !== null) {
                 $latDiff = abs($uploadLat - $existing->latitude);
                 $lonDiff = abs($uploadLon - $existing->longitude);
                 if ($latDiff < 0.0001 && $lonDiff < 0.0001) {
-                    $matchScore++;
+                    $matchCount++;
                 }
             }
             
             // Compare camera info
-            if ($uploadCameraMake && $existing->camera_make && 
+            if ($options['camera_make'] && $uploadCameraMake && $existing->camera_make && 
                 strtolower($uploadCameraMake) === strtolower($existing->camera_make)) {
-                $matchScore++;
+                $matchCount++;
             }
-            if ($uploadCameraModel && $existing->camera_model && 
+            if ($options['camera_model'] && $uploadCameraModel && $existing->camera_model && 
                 strtolower($uploadCameraModel) === strtolower($existing->camera_model)) {
-                $matchScore++;
+                $matchCount++;
             }
             
-            // Consider it a duplicate if we have strong matches:
-            // - Filename + Size + Date (4 points)
-            // - Filename + Size + Location (3 points)
-            // - Size + Date + Camera (5 points)
-            if ($matchScore >= 4) {
+            if ($matchCount >= $requiredMatches) {
                 return true;
             }
         }
         
         // Check against files in current batch
         foreach ($currentBatch as $batchMedia) {
-            if (strtolower($batchMedia->original_name) === $filename && 
-                $batchMedia->size_bytes === $fileSize) {
+            $batchMatchCount = 0;
+
+            if ($options['filename'] && strtolower($batchMedia->original_name) === $filename) {
+                $batchMatchCount++;
+            }
+
+            if ($options['size'] && $batchMedia->size_bytes === $fileSize) {
+                $batchMatchCount++;
+            }
+
+            if ($options['capture_date'] && $uploadCapturedAt && $batchMedia->captured_at) {
+                $batchDate = $this->normalizeDateValue($batchMedia->captured_at);
+                if ($batchDate && $batchDate === $uploadCapturedAt) {
+                    $batchMatchCount++;
+                }
+            }
+
+            if ($options['gps'] && $uploadLat !== null && $uploadLon !== null && $batchMedia->latitude !== null && $batchMedia->longitude !== null) {
+                $latDiff = abs($uploadLat - $batchMedia->latitude);
+                $lonDiff = abs($uploadLon - $batchMedia->longitude);
+                if ($latDiff < 0.0001 && $lonDiff < 0.0001) {
+                    $batchMatchCount++;
+                }
+            }
+
+            if ($options['camera_make'] && $uploadCameraMake && $batchMedia->camera_make &&
+                strtolower($uploadCameraMake) === strtolower($batchMedia->camera_make)) {
+                $batchMatchCount++;
+            }
+
+            if ($options['camera_model'] && $uploadCameraModel && $batchMedia->camera_model &&
+                strtolower($uploadCameraModel) === strtolower($batchMedia->camera_model)) {
+                $batchMatchCount++;
+            }
+
+            if ($batchMatchCount >= $requiredMatches) {
                 return true;
             }
         }
         
         return false;
+    }
+
+    private function normalizeDuplicateOptions(array $options): array
+    {
+        $defaults = [
+            'filename' => true,
+            'size' => true,
+            'capture_date' => true,
+            'gps' => true,
+            'camera_make' => true,
+            'camera_model' => true,
+        ];
+
+        foreach ($defaults as $key => $default) {
+            if (array_key_exists($key, $options)) {
+                $defaults[$key] = filter_var($options[$key], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+                $defaults[$key] = $defaults[$key] ?? $default;
+            }
+        }
+
+        return $defaults;
+    }
+
+    private function normalizeDateValue(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y:m:d H:i:s');
+        }
+
+        if ($value === null) {
+            return null;
+        }
+
+        $timestamp = strtotime((string) $value);
+        if ($timestamp === false) {
+            return null;
+        }
+
+        return date('Y:m:d H:i:s', $timestamp);
     }
     
     /**

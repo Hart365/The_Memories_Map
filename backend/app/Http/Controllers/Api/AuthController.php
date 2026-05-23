@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 use App\Models\MapGuest;
+use App\Services\TimezoneService;
 
 class AuthController extends Controller
 {
@@ -25,12 +26,13 @@ class AuthController extends Controller
             'name'     => $validated['name'],
             'email'    => $validated['email'],
             'password' => Hash::make($validated['password']),
+            'default_timezone' => TimezoneService::DEFAULT_TIMEZONE,
         ]);
 
         $token = $user->createToken('api-token', ['*'], now()->addDays(30))->plainTextToken;
 
         return response()->json([
-            'user'  => $user->only('id', 'name', 'email'),
+            'user'  => $user->only('id', 'name', 'email', 'default_timezone'),
             'token' => $token,
         ], 201);
     }
@@ -52,7 +54,7 @@ class AuthController extends Controller
         $token = $user->createToken('api-token', ['*'], now()->addDays(30))->plainTextToken;
 
         return response()->json([
-            'user'  => $user->only('id', 'name', 'email'),
+            'user'  => $user->only('id', 'name', 'email', 'default_timezone'),
             'token' => $token,
         ]);
     }

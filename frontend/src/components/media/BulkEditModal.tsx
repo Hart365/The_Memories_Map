@@ -1,514 +1,268 @@
-import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
-import FocusTrap from 'focus-trap-react'
-import { createPortal } from 'react-dom'
+import { useEffect, useState } from 'react'
+import {
+  Modal, Button, TextInput, Group, Stack, Text,
+  Checkbox, Progress, Divider, Textarea, useComputedColorScheme,
+} from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import { IconMapPin, IconSearch, IconEdit } from '@tabler/icons-react'
 import api from '@/lib/api'
-import type { MediaFile } from '@/types'
-import styles from './BulkEditModal.module.css'
+import type { MapNote, MediaFile } from '@/types'
+import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 
 interface Props {
-  mapId: string
-  media: MediaFile[]
+  opened: boolean
   onClose: () => void
+  mapId: string
+  selectedMedia: MediaFile[]
+  onSaved: () => void
 }
 
-export default function BulkEditModal({ mapId, media, onClose }: Props) {
-  const qc = useQueryClient()
+export default function BulkEditModal({ opened, onClose, mapId, selectedMedia, onSaved }: Props) {
+  const isDark = useComputedColorScheme('light') === 'dark'
   const [locationName, setLocationName] = useState('')
   const [locationAddress, setLocationAddress] = useState('')
   const [locationCity, setLocationCity] = useState('')
   const [locationCountry, setLocationCountry] = useState('')
   const [latitude, setLatitude] = useState('')
   const [longitude, setLongitude] = useState('')
+  const [caption, setCaption] = useState('')
+  const [noteBody, setNoteBody] = useState('')
+  const [captionOnlyWhereEmpty, setCaptionOnlyWhereEmpty] = useState(false)
+  const [skipIdenticalNotes, setSkipIdenticalNotes] = useState(false)
   const [overwrite, setOverwrite] = useState(false)
   const [searching, setSearching] = useState(false)
-
-  const [noteTitle, setNoteTitle] = useState('')
-  const [noteBody, setNoteBody] = useState('')
-  const [addNote, setAddNote] = useState(false)
-
-  const [updating, setUpdating] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(0)
 
-  const handleGeocodingSearch = async () => {
-    setSearching(true)
-    
-    try {
-      // Build query from available fields
-      const queryParts = [
-        locationName.trim(),
-        locationAddress.trim(),
-        locationCity.trim(),
-        locationCountry.trim()
-      ].filter(Boolean)
+  const brand = isDark ? '#22d3e0' : '#005f63'
 
-      if (queryParts.length === 0) {
-        toast.error('Please enter at least one location field to search')
-        setSearching(false)
-        return
-      }
+  const resetForm = () => {
+    setLocationName('')
+    setLocationAddress('')
+    setLocationCity('')
+    setLocationCountry('')
+    setLatitude('')
+    setLongitude('')
+    setCaption('')
+    setNoteBody('')
+    setCaptionOnlyWhereEmpty(false)
+    setSkipIdenticalNotes(false)
+    setOverwrite(false)
+    setSearching(false)
+    setSaving(false)
+    setProgress(0)
+  }
 
-      const query = queryParts.join(', ')
-      
-      // Check if we have valid coordinates for reverse geocoding
-      const lat = parseFloat(latitude.trim())
-      const lon = parseFloat(longitude.trim())
-      const hasValidCoordinates = 
-        latitude.trim() && 
-        longitude.trim() && 
-        !isNaN(lat) && 
-        !isNaN(lon) && 
-        (lat !== 0 || lon !== 0) && 
-        lat >= -90 && lat <= 90 && 
-        lon >= -180 && lon <= 180
+  const handleClose = () => {
+    if (saving) return
+    resetForm()
+    onClose()
+  }
 
-      let response
-      if (hasValidCoordinates) {
-        // Reverse geocoding: coordinates → address
-        response = await api.get(`/geocode?lat=${lat}&lon=${lon}`)
-      } else {
-        // Forward geocoding: text → coordinates
-        response = await api.get(`/geocode`, { params: { query } })
-      }
+  useEffect(() => {
+    if (!opened) {
+      resetForm()
+    }
+  }, [opened])
 
-      const data = response.data
-      let fieldsUpdated = 0
-
-      // Update fields that are empty
-      if (data.location_name && !locationName.trim()) {
-        setLocationName(data.location_name)
-        fieldsUpdated++
-      }
-      if (data.location_address && !locationAddress.trim()) {
-        setLocationAddress(data.location_address)
-        fieldsUpdated++
-      }
-      if (data.location_city && !locationCity.trim()) {
-        setLocationCity(data.location_city)
-        fieldsUpdated++
-      }
-      if (data.location_country && !locationCountry.trim()) {
-        setLocationCountry(data.location_country)
-        fieldsUpdated++
-      }
-      
-      // Always update coordinates when valid coords returned
-      if (data.latitude !== undefined && data.latitude !== null) {
-        setLatitude(data.latitude.toString())
-        fieldsUpdated++
-      }
-      if (data.longitude !== undefined && data.longitude !== null) {
-        setLongitude(data.longitude.toString())
-        fieldsUpdated++
-      }
-      
-      if (fieldsUpdated > 0) {
-        toast.success(`Found location! Auto-filled ${fieldsUpdated} field(s).`)
-      } else {
-        toast('Location found, but all fields already filled.', { icon: 'ℹ️' })
-      }
-      
-      setSearching(false)
+  const handleGeoSearch = async () => {
+    const parts = [locationName, locationAddress, locationCity, locationCountry].filter(Boolean).join(', ')
+    const lat = parseFloat(latitude)
+    const lon = parseFloat(longitude)
+    const hasCoords = latitude && longitude && !isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+    if (!parts && !hasCoords) {
+      notifications.show({ message: 'Enter a location name or coordinates to search.', color: 'orange' })
       return
-    } catch (error: any) {
-      console.error('Geocoding error:', error)
-      if (error.response?.status === 404) {
-        toast.error('No location found. Try: 1) Check spelling 2) Use fewer words 3) Try just city + country', { duration: 6000 })
-      } else if (error.response?.data?.error) {
-        toast.error(`Search failed: ${error.response.data.error}`)
-      } else {
-        toast.error('Search failed. Check your internet connection and try again.')
-      }
+    }
+    setSearching(true)
+    try {
+      const res = hasCoords
+        ? await api.get('/geocode', { params: { lat, lon } })
+        : await api.get('/geocode', { params: { query: parts } })
+      const d = res.data
+      if (d.location_name && !locationName) setLocationName(d.location_name)
+      if (d.location_address && !locationAddress) setLocationAddress(d.location_address)
+      if (d.location_city && !locationCity) setLocationCity(d.location_city)
+      if (d.location_country && !locationCountry) setLocationCountry(d.location_country)
+      if (d.latitude != null) setLatitude(String(d.latitude))
+      if (d.longitude != null) setLongitude(String(d.longitude))
+      notifications.show({ message: 'Location found and auto-filled!', color: 'teal' })
+    } catch {
+      notifications.show({ message: 'Location not found. Try different search terms.', color: 'red' })
     } finally {
       setSearching(false)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (media.length === 0) {
-      toast.error('No media files selected')
+  const handleSave = async () => {
+    const hasLocation = locationName || locationAddress || locationCity || locationCountry || (latitude && longitude)
+    const hasCaption = caption.trim().length > 0
+    const hasNote = noteBody.trim().length > 0
+
+    if (!hasLocation && !hasCaption && !hasNote) {
+      notifications.show({ message: 'Enter location, caption, or note to apply.', color: 'orange' })
       return
     }
 
-    // Validate that at least something is being updated
-    const hasLocationData = locationName.trim() || locationAddress.trim() || 
-                           locationCity.trim() || locationCountry.trim() || 
-                           (latitude && longitude)
-    const hasNoteData = addNote && noteBody.trim()
-    
-    if (!hasLocationData && !hasNoteData) {
-      toast.error('Please enter location data or a note to apply')
-      return
-    }
-
-    // Validate coordinates if provided
-    if (latitude && longitude) {
-      const lat = parseFloat(latitude)
-      const lon = parseFloat(longitude)
-      if (isNaN(lat) || lat < -90 || lat > 90) {
-        toast.error('Latitude must be between -90 and 90')
-        return
-      }
-      if (isNaN(lon) || lon < -180 || lon > 180) {
-        toast.error('Longitude must be between -180 and 180')
-        return
-      }
-    }
-
-    setUpdating(true)
+    setSaving(true)
     setProgress(0)
-    
-    const payload: any = {}
-    
-    // Only include fields that have values
-    if (locationName.trim()) payload.location_name = locationName.trim()
-    if (locationAddress.trim()) payload.location_address = locationAddress.trim()
-    if (locationCity.trim()) payload.location_city = locationCity.trim()
-    if (locationCountry.trim()) payload.location_country = locationCountry.trim()
-    
+    const normalizedNoteBody = noteBody.trim()
+    const payload: Record<string, string | number> = {}
+    if (locationName) payload.location_name = locationName
+    if (locationAddress) payload.location_address = locationAddress
+    if (locationCity) payload.location_city = locationCity
+    if (locationCountry) payload.location_country = locationCountry
     if (latitude && longitude) {
       payload.latitude = parseFloat(latitude)
       payload.longitude = parseFloat(longitude)
     }
+    if (hasCaption) payload.user_caption = caption.trim()
 
-    let succeeded = 0
-    let failed = 0
-    let notesCreated = 0
+    const existingNoteBodiesByMediaId = new Map<number, Set<string>>()
+    if (hasNote && skipIdenticalNotes) {
+      try {
+        const res = await api.get<MapNote[]>('/maps/' + mapId + '/notes')
+        const allNotes = Array.isArray(res.data) ? res.data : []
+        for (const note of allNotes) {
+          if (note.note_type !== 'media' || note.media_id == null) continue
+          const trimmedBody = note.body?.trim()
+          if (!trimmedBody) continue
 
-    try {
-      for (let i = 0; i < media.length; i++) {
-        const item = media[i]
-        
-        // Update location data
-        if (hasLocationData) {
-          // Skip if not overwriting and item already has location data
-          if (!overwrite && (item.location_name || item.latitude)) {
-            // Still create note if requested, don't skip entirely
-          } else {
-            try {
-              await api.put(`/maps/${mapId}/media/${item.id}`, payload)
-              succeeded++
-            } catch (err) {
-              console.error(`Failed to update media ${item.id}:`, err)
-              failed++
-            }
-          }
+          const existingBodies = existingNoteBodiesByMediaId.get(note.media_id) ?? new Set<string>()
+          existingBodies.add(trimmedBody)
+          existingNoteBodiesByMediaId.set(note.media_id, existingBodies)
         }
-
-        // Create note for this media file if requested
-        if (hasNoteData) {
-          try {
-            await api.post(`/maps/${mapId}/notes`, {
-              note_type: 'media',
-              media_id: item.id,
-              title: noteTitle.trim() || null,
-              body: noteBody.trim(),
-            })
-            notesCreated++
-          } catch (err) {
-            console.error(`Failed to create note for media ${item.id}:`, err)
-          }
-        }
-
-        setProgress(Math.round(((i + 1) / media.length) * 100))
+      } catch {
+        notifications.show({
+          message: 'Could not verify existing notes. Disable duplicate-note safeguard or try again.',
+          color: 'red',
+        })
+        setSaving(false)
+        return
       }
-
-      // Refresh queries
-      await qc.refetchQueries({ queryKey: ['media', mapId] })
-      if (hasNoteData) {
-        await qc.refetchQueries({ queryKey: ['notes', mapId] })
-      }
-      
-      const messages = []
-      if (hasLocationData && succeeded > 0) {
-        messages.push(`Updated location for ${succeeded} file${succeeded !== 1 ? 's' : ''}`)
-      }
-      if (notesCreated > 0) {
-        messages.push(`Created ${notesCreated} note${notesCreated !== 1 ? 's' : ''}`)
-      }
-      if (failed > 0) {
-        messages.push(`${failed} failed`)
-      }
-      
-      if (messages.length > 0) {
-        if (failed === 0) {
-          toast.success(messages.join(', '))
-        } else {
-          toast.error(messages.join(', '))
-        }
-      }
-      
-      onClose()
-    } catch (err) {
-      toast.error('Bulk update failed')
-    } finally {
-      setUpdating(false)
-      setProgress(0)
     }
+
+    let done = 0
+    const totalSteps = selectedMedia.length * (hasNote ? 2 : 1)
+
+    for (const m of selectedMedia) {
+      const shouldSkipLocation = hasLocation && !overwrite && (m.location_name || m.latitude)
+      const mediaPayload: Record<string, string | number> = { ...payload }
+
+      if (shouldSkipLocation) {
+        delete mediaPayload.location_name
+        delete mediaPayload.location_address
+        delete mediaPayload.location_city
+        delete mediaPayload.location_country
+        delete mediaPayload.latitude
+        delete mediaPayload.longitude
+      }
+
+      if (hasCaption && captionOnlyWhereEmpty && m.user_caption?.trim()) {
+        delete mediaPayload.user_caption
+      }
+
+      try {
+        if (Object.keys(mediaPayload).length > 0) {
+          await api.put('/maps/' + mapId + '/media/' + m.id, mediaPayload)
+        }
+      } catch {
+        // Continue attempting updates for other selected media.
+      }
+      done++
+      setProgress(Math.round((done / totalSteps) * 100))
+
+      if (hasNote) {
+        try {
+          const shouldSkipNote = skipIdenticalNotes
+            && (existingNoteBodiesByMediaId.get(m.id)?.has(normalizedNoteBody) ?? false)
+
+          if (!shouldSkipNote) {
+            await api.post('/maps/' + mapId + '/notes', {
+              note_type: 'media',
+              media_id: m.id,
+              body: normalizedNoteBody,
+            })
+          }
+        } catch {
+          // Continue attempting notes for other selected media.
+        }
+        done++
+        setProgress(Math.round((done / totalSteps) * 100))
+      }
+    }
+
+    setSaving(false)
+    notifications.show({ message: 'Bulk edits applied to selected media.', color: 'teal' })
+    resetForm()
+    onSaved()
   }
 
-  const filesWithLocation = media.filter(m => m.location_name || m.latitude).length
-  const filesWithoutLocation = media.length - filesWithLocation
+  return (
+    <Modal opened={opened} onClose={handleClose}
+      title={<Group gap="xs"><IconEdit size={18} color={brand} aria-hidden /><Text fw={700}>Bulk Edit Media</Text></Group>}
+      size="lg" radius="lg" centered>
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">{selectedMedia.length} item{selectedMedia.length !== 1 ? 's' : ''} selected</Text>
+        <Divider label="Location" labelPosition="left" />
+        <Group gap="sm" grow>
+          <TextInput label="Place name" value={locationName} onChange={(e) => setLocationName(e.currentTarget.value)} aria-label="Location name" />
+          <TextInput label="City" value={locationCity} onChange={(e) => setLocationCity(e.currentTarget.value)} aria-label="City" />
+        </Group>
+        <TextInput label="Street address" value={locationAddress} onChange={(e) => setLocationAddress(e.currentTarget.value)} aria-label="Street address" />
+        <TextInput label="Country" value={locationCountry} onChange={(e) => setLocationCountry(e.currentTarget.value)} aria-label="Country" />
+        <Group gap="sm" grow>
+          <TextInput label="Latitude" value={latitude} onChange={(e) => setLatitude(e.currentTarget.value)} placeholder="-90 to 90" aria-label="Latitude" />
+          <TextInput label="Longitude" value={longitude} onChange={(e) => setLongitude(e.currentTarget.value)} placeholder="-180 to 180" aria-label="Longitude" />
+        </Group>
+        <Button variant="default" styles={getMapSectionButtonStyles('map')} leftSection={<IconSearch size={14} aria-hidden />}
+          loading={searching} onClick={handleGeoSearch} size="sm">
+          Search location
+        </Button>
+        <Checkbox checked={overwrite} onChange={(e) => setOverwrite(e.currentTarget.checked)}
+          label="Overwrite existing location data" aria-label="Overwrite existing location data" />
 
-  return createPortal(
-    <FocusTrap>
-      <div
-        className={styles.backdrop}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="bulk-edit-title"
-        onKeyDown={(e) => { if (e.key === 'Escape' && !updating) onClose() }}
-      >
-        <div className={styles.panel}>
-          <div className={styles.header}>
-            <h2 id="bulk-edit-title" className={styles.title}>
-              <span className={styles.icon} aria-hidden="true">✏️</span>
-              Bulk Edit
-            </h2>
-            <button
-              type="button"
-              className={styles.closeBtn}
-              onClick={onClose}
-              aria-label="Close bulk edit"
-              disabled={updating}
-            >
-              ✕
-            </button>
-          </div>
+        <Divider label="Caption" labelPosition="left" />
+        <TextInput
+          label="Caption to apply to selected media"
+          value={caption}
+          onChange={(e) => setCaption(e.currentTarget.value)}
+          maxLength={2000}
+          aria-label="Caption to apply to selected media"
+        />
+        <Checkbox
+          checked={captionOnlyWhereEmpty}
+          onChange={(e) => setCaptionOnlyWhereEmpty(e.currentTarget.checked)}
+          label="Apply caption only where empty"
+          aria-label="Apply caption only where empty"
+        />
 
-          <div className={styles.info}>
-            <p>
-              Editing {media.length} file{media.length !== 1 ? 's' : ''}
-            </p>
-            {filesWithLocation > 0 && (
-              <p className={styles.warning}>
-                ⚠️ {filesWithLocation} file{filesWithLocation !== 1 ? 's have' : ' has'} existing location data
-              </p>
-            )}
-          </div>
+        <Divider label="Notes" labelPosition="left" />
+        <Textarea
+          label="Add note to all selected images"
+          description="Creates one media note per selected item."
+          value={noteBody}
+          onChange={(e) => setNoteBody(e.currentTarget.value)}
+          maxLength={5000}
+          minRows={3}
+          autosize
+          aria-label="Note to add to all selected images"
+        />
+        <Checkbox
+          checked={skipIdenticalNotes}
+          onChange={(e) => setSkipIdenticalNotes(e.currentTarget.checked)}
+          label="Skip note if an identical note already exists"
+          aria-label="Skip note if an identical note already exists"
+        />
 
-          <form onSubmit={handleSubmit} className={styles.form}>
-            <div className="form-group">
-              <label htmlFor="bulk-location-name" className="form-label">
-                Place Name
-              </label>
-              <input
-                id="bulk-location-name"
-                type="text"
-                className="form-input"
-                value={locationName}
-                onChange={(e) => setLocationName(e.target.value)}
-                maxLength={255}
-                placeholder="e.g., Eiffel Tower, Central Park"
-                disabled={updating}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="bulk-location-address" className="form-label">
-                Street Address
-              </label>
-              <input
-                id="bulk-location-address"
-                type="text"
-                className="form-input"
-                value={locationAddress}
-                onChange={(e) => setLocationAddress(e.target.value)}
-                maxLength={255}
-                placeholder="e.g., 5 Avenue Anatole France"
-                disabled={updating}
-              />
-            </div>
-
-            <div className={styles.row}>
-              <div className="form-group">
-                <label htmlFor="bulk-location-city" className="form-label">
-                  City
-                </label>
-                <input
-                  id="bulk-location-city"
-                  type="text"
-                  className="form-input"
-                  value={locationCity}
-                  onChange={(e) => setLocationCity(e.target.value)}
-                  maxLength={255}
-                  placeholder="e.g., Paris"
-                  disabled={updating}
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="bulk-location-country" className="form-label">
-                  Country
-                </label>
-                <input
-                  id="bulk-location-country"
-                  type="text"
-                  className="form-input"
-                  value={locationCountry}
-                  onChange={(e) => setLocationCountry(e.target.value)}
-                  maxLength={255}
-                  placeholder="e.g., France"
-                  disabled={updating}
-                />
-              </div>
-            </div>
-
-            <div className={styles.searchSection}>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleGeocodingSearch}
-                disabled={searching || updating}
-                aria-label="Search for location coordinates"
-              >
-                {searching ? '🔍 Searching…' : '🔍 Search Location'}
-              </button>
-              <small className="form-hint">
-                Fill in location details above, then click to auto-complete coordinates
-              </small>
-            </div>
-
-            <div className={styles.row}>
-              <div className="form-group">
-                <label htmlFor="bulk-latitude" className="form-label">
-                  Latitude
-                </label>
-                <input
-                  id="bulk-latitude"
-                  type="text"
-                  className="form-input"
-                  value={latitude}
-                  onChange={(e) => setLatitude(e.target.value)}
-                  placeholder="e.g., 48.858370"
-                  disabled={updating}
-                />
-                <small className="form-hint">-90 to 90</small>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="bulk-longitude" className="form-label">
-                  Longitude
-                </label>
-                <input
-                  id="bulk-longitude"
-                  type="text"
-                  className="form-input"
-                  value={longitude}
-                  onChange={(e) => setLongitude(e.target.value)}
-                  placeholder="e.g., 2.294481"
-                  disabled={updating}
-                />
-                <small className="form-hint">-180 to 180</small>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className={styles.checkboxLabel}>
-                <input
-                  type="checkbox"
-                  checked={overwrite}
-                  onChange={(e) => setOverwrite(e.target.checked)}
-                  disabled={updating}
-                />
-                <span>Overwrite existing location data</span>
-              </label>
-              <small className="form-hint">
-                {overwrite 
-                  ? `Will update all ${media.length} selected files`
-                  : `Will only update ${filesWithoutLocation} files without location data`
-                }
-              </small>
-            </div>
-
-            <div className={styles.divider} />
-
-            <div className={styles.noteSection}>
-              <div className="form-group">
-                <label className={styles.checkboxLabel}>
-                  <input
-                    type="checkbox"
-                    checked={addNote}
-                    onChange={(e) => setAddNote(e.target.checked)}
-                    disabled={updating}
-                  />
-                  <span>Add note to all selected files</span>
-                </label>
-              </div>
-
-              {addNote && (
-                <>
-                  <div className="form-group">
-                    <label htmlFor="bulk-note-title" className="form-label">
-                      Note Title <span className={styles.optional}>(optional)</span>
-                    </label>
-                    <input
-                      id="bulk-note-title"
-                      type="text"
-                      className="form-input"
-                      value={noteTitle}
-                      onChange={(e) => setNoteTitle(e.target.value)}
-                      maxLength={255}
-                      placeholder="Enter a title for the note"
-                      disabled={updating}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="bulk-note-body" className="form-label">
-                      Note <span aria-hidden="true">*</span>
-                    </label>
-                    <textarea
-                      id="bulk-note-body"
-                      className="form-textarea"
-                      rows={4}
-                      value={noteBody}
-                      onChange={(e) => setNoteBody(e.target.value)}
-                      required={addNote}
-                      aria-required={addNote}
-                      maxLength={5000}
-                      placeholder="Enter the note content"
-                      disabled={updating}
-                    />
-                    <small className="form-hint">
-                      {noteBody.length} / 5000 characters
-                    </small>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {updating && (
-              <div className={styles.progressWrapper}>
-                <div className={styles.progressBar} style={{ width: `${progress}%` }} />
-                <span className={styles.progressText}>{progress}%</span>
-              </div>
-            )}
-
-            <div className={styles.actions}>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={updating}
-              >
-                {updating ? `Updating... ${progress}%` : 'Apply to All Selected'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={onClose}
-                disabled={updating}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </FocusTrap>,
-    document.body
+        {saving && <Progress value={progress} color="teal" size="sm" aria-label="Saving progress" />}
+        <Group justify="flex-end" mt="xs">
+          <Button variant="default" styles={getMapSectionButtonStyles('gallery')} onClick={handleClose} disabled={saving}>Cancel</Button>
+          <Button variant="default" styles={getMapSectionButtonStyles('upload', 'solid')} loading={saving} leftSection={<IconMapPin size={16} aria-hidden />} onClick={handleSave}>
+            Apply to {selectedMedia.length} item{selectedMedia.length !== 1 ? 's' : ''}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }

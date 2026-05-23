@@ -17,6 +17,7 @@
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  outline: none;
 }
 
 .btn:hover:not(:disabled) {
@@ -35,45 +36,51 @@
   transform: none !important;
 }
 
+.btn:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-secondary) 45%, transparent), var(--shadow-md);
+}
+
 .btn-primary {
-  background: var(--gradient-primary);
+  background: linear-gradient(135deg, #0b666a, #08484b);
   color: #ffffff;
-  border-color: var(--color-primary);
+  border-color: #06383a;
 }
 .btn-primary:hover:not(:disabled) { 
-  background: var(--color-primary);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 40%, transparent);
+  background: linear-gradient(135deg, #0a5c5f, #06383a);
+  box-shadow: 0 10px 18px rgba(10, 92, 95, 0.2), 0 4px 8px rgba(10, 92, 95, 0.14);
 }
 
 .btn-secondary {
-  background-color: var(--color-surface);
-  color: var(--color-primary);
-  border-color: var(--color-primary);
+  background: linear-gradient(135deg, #ecfdfa, #c9f2ee);
+  color: #12303b;
+  border-color: #0a5c5f;
 }
 .btn-secondary:hover:not(:disabled) { 
-  background-color: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #ffffff;
+  background: linear-gradient(135deg, #d8f3f0, #aee4dd);
+  border-color: #08484b;
+  color: #102a33;
 }
 
 .btn-danger {
-  background-color: var(--color-error);
+  background: linear-gradient(135deg, #991b1b, #7f1d1d);
   color: #ffffff;
-  border-color: var(--color-error);
+  border-color: #7f1d1d;
 }
 .btn-danger:hover:not(:disabled) { 
-  background-color: color-mix(in srgb, var(--color-error) 85%, black);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-error) 40%, transparent);
+  background: linear-gradient(135deg, #7f1d1d, #681313);
+  box-shadow: 0 10px 18px rgba(127, 29, 29, 0.2), 0 4px 8px rgba(127, 29, 29, 0.14);
 }
 
 .btn-accent {
-  background: var(--gradient-accent);
-  color: #ffffff;
-  border-color: var(--color-accent);
+  background: linear-gradient(135deg, #fde68a, #fcd34d);
+  color: #3b2406;
+  border-color: #b45309;
 }
 .btn-accent:hover:not(:disabled) {
-  background: var(--color-accent);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-accent) 40%, transparent);
+  background: linear-gradient(135deg, #fcd34d, #fbbf24);
+  box-shadow: 0 10px 18px rgba(180, 83, 9, 0.2), 0 4px 8px rgba(180, 83, 9, 0.14);
 }
 
 /* Button sizes */

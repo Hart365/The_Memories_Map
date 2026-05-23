@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import {
+  Paper, Button, Text, Group, Stack, Switch, Badge, useComputedColorScheme,
+} from '@mantine/core'
+import { notifications } from '@mantine/notifications'
+import { IconMap, IconMapPin, IconSearch, IconRefresh, IconCheck } from '@tabler/icons-react'
 import api from '@/lib/api'
-import styles from './MapControls.module.css'
+import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 
 interface MapControlsProps {
   mapId: string
@@ -10,187 +14,98 @@ interface MapControlsProps {
   mediaNeedingGeocodeCount: number
   showRoutes: boolean
   onToggleRoutes: (show: boolean) => void
+  onRequestEnhancedRescan?: () => void
+  enhancedRescanBusy?: boolean
 }
 
-export default function MapControls({ 
-  mapId, 
-  mediaCount, 
+export default function MapControls({
+  mapId,
+  mediaCount,
   mediaNeedingGeocodeCount,
   showRoutes,
-  onToggleRoutes 
+  onToggleRoutes,
+  onRequestEnhancedRescan,
+  enhancedRescanBusy = false,
 }: MapControlsProps) {
+  const isDark = useComputedColorScheme('light') === 'dark'
   const qc = useQueryClient()
   const [scanning, setScanning] = useState(false)
-  const [rescanning, setRescanning] = useState(false)
+  const brand = isDark ? '#22d3e0' : '#005f63'
+  const surface = isDark ? '#1e2736' : '#f8fafc'
+  const border = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)'
 
   const bulkRescanMutation = useMutation({
-    mutationFn: () => api.post(`/maps/${mapId}/media/rescan-locations`),
-    onMutate: () => {
-      setScanning(true)
-      toast.loading('Scanning media for location data...', { id: 'bulk-scan' })
-    },
-    onSuccess: (response) => {
-      const data = response.data
+    mutationFn: () => api.post('/maps/' + mapId + '/media/rescan-locations'),
+    onMutate: () => setScanning(true),
+    onSuccess: (res) => {
+      const d = res.data
       setScanning(false)
-      toast.success(
-        `Scan complete! Updated ${data.updated} files, skipped ${data.skipped}.`,
-        { id: 'bulk-scan', duration: 5000 }
-      )
+      notifications.show({ message: 'Scan complete! Updated ' + d.updated + ', skipped ' + d.skipped + '.', color: 'teal' })
       qc.invalidateQueries({ queryKey: ['media', mapId] })
     },
     onError: () => {
       setScanning(false)
-      toast.error('Failed to scan locations. Please try again.', { id: 'bulk-scan' })
-    },
-  })
-
-  const rescanAllMutation = useMutation({
-    mutationFn: () => api.post(`/maps/${mapId}/media/rescan-locations`),
-    onMutate: () => {
-      setRescanning(true)
-      toast.loading('Re-geocoding all media files with enhanced location detection...', { id: 'rescan-all' })
-    },
-    onSuccess: (response) => {
-      const data = response.data
-      setRescanning(false)
-      toast.success(
-        `Enhanced location scan complete! Updated ${data.updated} files.`,
-        { id: 'rescan-all', duration: 5000 }
-      )
-      qc.invalidateQueries({ queryKey: ['media', mapId] })
-    },
-    onError: () => {
-      setRescanning(false)
-      toast.error('Failed to rescan locations. Please try again.', { id: 'rescan-all' })
+      notifications.show({ message: 'Scan failed. Please try again.', color: 'red' })
     },
   })
 
   return (
-    <div className={styles.controls} role="region" aria-label="Map controls">
-      <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>
-          <span className={styles.icon} aria-hidden="true">🗺️</span>
-          Map Controls
-        </h3>
-        
-        {/* Route Toggle */}
-        <label className={styles.toggleLabel}>
-          <input
-            type="checkbox"
-            checked={showRoutes}
-            onChange={(e) => onToggleRoutes(e.target.checked)}
-            className={styles.checkbox}
-            aria-describedby="route-description"
-          />
-          <span className={styles.toggleText}>Show photo route</span>
-        </label>
-        <p id="route-description" className={styles.description}>
+    <Stack gap="md" role="region" aria-label="Map controls">
+      <Paper p="md" radius="md" style={{ backgroundColor: surface, border }}>
+        <Group gap="sm" mb="sm">
+          <IconMap size={18} color={brand} aria-hidden />
+          <Text fw={700} size="sm" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Map Controls
+          </Text>
+        </Group>
+        <Switch
+          checked={showRoutes}
+          onChange={(e) => onToggleRoutes(e.currentTarget.checked)}
+          label="Show photo route"
+          aria-label="Toggle route visualization connecting photos chronologically"
+          color="teal"
+        />
+        <Text size="xs" c="dimmed" mt={4}>
           Connect photos chronologically to visualize your journey
-        </p>
-      </div>
+        </Text>
+      </Paper>
 
-      {/* Location Data Stats - Always visible */}
-      <div className={styles.section}>
-        <h3 className={styles.sectionTitle}>
-          <span className={styles.icon} aria-hidden="true">📍</span>
-          Location Data
-        </h3>
-        
-        <div className={styles.stats}>
-          <div className={styles.stat}>
-            <span className={styles.statValue}>{mediaCount - mediaNeedingGeocodeCount}</span>
-            <span className={styles.statLabel}>with location</span>
-          </div>
-          <div className={styles.stat}>
-            <span className={styles.statValue}>{mediaNeedingGeocodeCount}</span>
-            <span className={styles.statLabel}>need scanning</span>
-          </div>
-        </div>
-
+      <Paper p="md" radius="md" style={{ backgroundColor: surface, border }}>
+        <Group gap="sm" mb="sm">
+          <IconMapPin size={18} color={brand} aria-hidden />
+          <Text fw={700} size="sm" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Location Data
+          </Text>
+        </Group>
+        <Group gap="sm" mb="md">
+          <Badge color="green" variant="light" size="sm">{mediaCount - mediaNeedingGeocodeCount} with location</Badge>
+          {mediaNeedingGeocodeCount > 0 && <Badge color="orange" variant="light" size="sm">{mediaNeedingGeocodeCount} need scan</Badge>}
+        </Group>
         {mediaNeedingGeocodeCount > 0 ? (
-          <>
-            <button
-              type="button"
-              className="btn btn-accent"
+          <Stack gap="xs">
+            <Button size="sm" variant="default" styles={getMapSectionButtonStyles('map')} loading={scanning || bulkRescanMutation.isPending}
+              disabled={enhancedRescanBusy} leftSection={<IconSearch size={14} aria-hidden />}
               onClick={() => bulkRescanMutation.mutate()}
-              disabled={scanning || bulkRescanMutation.isPending || rescanning}
-              aria-label={`Scan ${mediaNeedingGeocodeCount} files for GPS location data`}
-            >
-              {scanning ? (
-                <>
-                  <span className="spinner" aria-hidden="true" />
-                  Scanning...
-                </>
-              ) : (
-                <>
-                  <span aria-hidden="true">🔍</span>
-                  Scan All ({mediaNeedingGeocodeCount})
-                </>
-              )}
-            </button>
-            
-            <p className={styles.hint}>
-              Scans media with GPS coordinates to extract location names, landmarks, and addresses
-            </p>
-          </>
-        ) : (
-          <p className={styles.hint}>
-            {mediaCount > 0 
-              ? '✓ All media files have location data or no GPS coordinates'
-              : 'No media files uploaded yet'
-            }
-          </p>
-        )}
-        
-        {/* Rescan All Button - Enhanced Location Detection */}
+              aria-label={'Scan ' + mediaNeedingGeocodeCount + ' files for GPS location data'}>
+              Scan All ({mediaNeedingGeocodeCount})
+            </Button>
+            <Text size="xs" c="dimmed">Scans media with GPS coordinates to extract location names</Text>
+          </Stack>
+        ) : mediaCount > 0 ? (
+          <Group gap="xs">
+            <IconCheck size={16} color={brand} aria-hidden />
+            <Text size="sm" c="dimmed">All media have location data</Text>
+          </Group>
+        ) : null}
         {mediaCount > 0 && (
-          <>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => rescanAllMutation.mutate()}
-              disabled={rescanning || rescanAllMutation.isPending || scanning}
-              aria-label="Re-geocode all media files with enhanced location detection"
-              style={{ marginTop: '1rem' }}
-            >
-              {rescanning ? (
-                <>
-                  <span className="spinner" aria-hidden="true" />
-                  Re-geocoding...
-                </>
-              ) : (
-                <>
-                  <span aria-hidden="true">🌍</span>
-                  Rescan All for Enhanced Locations
-                </>
-              )}
-            </button>
-            
-            <p className={styles.hint} style={{ marginTop: '0.5rem' }}>
-              Re-geocode all files using improved POI detection (e.g., "Guggenheim Museum" instead of street addresses)
-            </p>
-          </>
+          <Button size="sm" variant="default" styles={getMapSectionButtonStyles('gallery')} mt="sm" loading={enhancedRescanBusy}
+            disabled={scanning} leftSection={<IconRefresh size={14} aria-hidden />}
+            onClick={() => onRequestEnhancedRescan?.()}
+            aria-label="Re-geocode all media with enhanced location detection">
+            Rescan All (Enhanced)
+          </Button>
         )}
-      </div>
-
-      {/* Info Section */}
-      <div className={styles.infoSection}>
-        <h4 className={styles.infoTitle}>About Location Data</h4>
-        <ul className={styles.infoList}>
-          <li>Photos with GPS are automatically geocoded on upload</li>
-          <li>Location names prioritize POIs (museums, parks) over street addresses</li>
-          <li>Bulk scan processes files with GPS but no location names</li>
-          <li>Rescan All re-geocodes everything with enhanced detection</li>
-          <li>All location data is cached for 30 days</li>
-        </ul>
-        
-        <h4 className={styles.infoTitle} style={{ marginTop: '1rem' }}>Duplicate Detection</h4>
-        <ul className={styles.infoList}>
-          <li>Compares filename, date, size, GPS, and camera settings</li>
-          <li>Only skips files with strong multi-factor matches</li>
-          <li>Prevents false positives from same-named files</li>
-        </ul>
-      </div>
-    </div>
+      </Paper>
+    </Stack>
   )
 }

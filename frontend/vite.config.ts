@@ -1,18 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import path from 'path'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const currentDir = dirname(fileURLToPath(import.meta.url))
+const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:8080'
 
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': resolve(currentDir, './src'),
     },
   },
   server: {
     proxy: {
       '/api': {
-        target: process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:8080',
+        target: devProxyTarget,
         changeOrigin: true,
       },
     },
@@ -22,10 +26,13 @@ export default defineConfig({
     emptyOutDir: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor:  ['react', 'react-dom', 'react-router-dom'],
-          map:     ['leaflet', 'react-leaflet'],
-          query:   ['@tanstack/react-query'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('leaflet') || id.includes('react-leaflet')) return 'map'
+            if (id.includes('@tanstack/react-query')) return 'query'
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) return 'vendor'
+          }
+          return undefined
         },
       },
     },

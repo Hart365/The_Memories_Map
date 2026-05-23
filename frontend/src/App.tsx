@@ -37,6 +37,8 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/maps/:mapId" element={<MapViewPage />} />
+          <Route path="/maps/:mapId/consolidated" element={<MapViewPage />} />
+                    <Route path="/maps/:mapId/map" element={<MapViewPage />} />
           <Route path="/maps/:mapId/timeline" element={<TimelinePage />} />
           <Route path="/maps/:mapId/gallery" element={<GalleryPage />} />
           <Route path="/maps/:mapId/media/:mediaId" element={<MediaViewerPage />} />

@@ -77,7 +77,8 @@ class MediaProcessingService
         ];
 
         if (str_starts_with($mime, 'image/')) {
-            $attributes = array_merge($attributes, $this->extractImageMeta($fullPath));
+            $sourceTimezone = $map->user?->default_timezone ?? TimezoneService::DEFAULT_TIMEZONE;
+            $attributes = array_merge($attributes, $this->extractImageMeta($fullPath, $sourceTimezone));
             $attributes['thumbnail_name'] = $this->generateImageThumbnail($fullPath, $storedName);
         } elseif (str_starts_with($mime, 'video/')) {
             $attributes = array_merge($attributes, $this->extractVideoMeta($fullPath));
@@ -147,7 +148,7 @@ class MediaProcessingService
      * Calculate timezone and local time from GPS coordinates and captured_at timestamp.
      * Modifies the attributes array in place.
      */
-    private function calculateTimezoneData(array &$attrs): void
+    private function calculateTimezoneData(array &$attrs, ?string $sourceTimezone = null): void
     {
         // Need both GPS coordinates and a capture timestamp
         if (empty($attrs['latitude']) || empty($attrs['longitude']) || empty($attrs['captured_at'])) {
@@ -164,26 +165,31 @@ class MediaProcessingService
         }
 
         $attrs['timezone'] = $tzData['timezone'];
-        $attrs['timezone_offset'] = $tzData['offset'];
 
-        // Convert captured_at (UTC) to local time
+        // Keep captured_at_local aligned to the user's default/source timezone for timeline display,
+        // while storing media location timezone and its UTC offset for reference.
         try {
-            $utcTime = $attrs['captured_at'];
-            if ($utcTime instanceof \Carbon\Carbon) {
-                $utcTime = $utcTime->toDateTime();
-            } elseif (is_string($utcTime)) {
-                $utcTime = new \DateTime($utcTime);
-            }
+            $capturedAt = $attrs['captured_at'];
+            $capturedAtUtc = $capturedAt instanceof \Carbon\Carbon
+                ? $capturedAt->copy()->setTimezone('UTC')
+                : \Carbon\Carbon::parse((string) $capturedAt, 'UTC');
 
-            $localTime = $this->timezone->convertToLocalTime($utcTime, $tzData['timezone']);
-            if ($localTime) {
-                $attrs['captured_at_local'] = \Carbon\Carbon::instance($localTime);
+            $sourceTz = $sourceTimezone ?: TimezoneService::DEFAULT_TIMEZONE;
+            $attrs['captured_at'] = $capturedAtUtc;
+            $attrs['captured_at_local'] = $capturedAtUtc->copy()->setTimezone($sourceTz);
+
+            $locationLocal = $capturedAtUtc->copy()->setTimezone($tzData['timezone']);
+            $attrs['timezone_offset'] = $locationLocal->utcOffset();
+            if (isset($attrs['timezone_offset']) && is_int($attrs['timezone_offset'])) {
+                // Carbon utcOffset() returns offset in minutes.
+                $attrs['timezone_offset'] = (int) $attrs['timezone_offset'];
             }
         } catch (\Throwable $e) {
             \Log::warning('Failed to calculate local time', [
                 'latitude' => $attrs['latitude'],
                 'longitude' => $attrs['longitude'],
                 'timezone' => $tzData['timezone'],
+                'source_timezone' => $sourceTimezone,
                 'error' => $e->getMessage(),
             ]);
         }
@@ -204,7 +210,7 @@ class MediaProcessingService
 
     // ── Private helpers ───────────────────────────────────────────────────
 
-    private function extractImageMeta(string $path): array
+    private function extractImageMeta(string $path, ?string $sourceTimezone = null): array
     {
         $attrs = [];
 
@@ -235,9 +241,10 @@ class MediaProcessingService
                 ?? $exif['IFD0']['DateTime']
                 ?? null;
             if ($dateStr) {
-                try {
-                    $attrs['captured_at'] = \Carbon\Carbon::createFromFormat('Y:m:d H:i:s', $dateStr);
-                } catch (\Throwable) {}
+                $capturedAtUtc = $this->timezone->parseCameraLocalToUtc($dateStr, $sourceTimezone);
+                if ($capturedAtUtc) {
+                    $attrs['captured_at'] = $capturedAtUtc;
+                }
             }
 
             // Camera
@@ -259,7 +266,7 @@ class MediaProcessingService
         $attrs['height'] = $h;
 
         // Calculate timezone and local time if we have GPS and timestamp
-        $this->calculateTimezoneData($attrs);
+        $this->calculateTimezoneData($attrs, $sourceTimezone);
 
         return array_filter($attrs, fn ($v) => $v !== null);
     }

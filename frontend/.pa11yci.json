@@ -1,0 +1,18 @@
+{
+  "defaults": {
+    "standard": "WCAG2AAA",
+    "timeout": 30000,
+    "wait": 800,
+    "chromeLaunchConfig": {
+      "args": [
+        "--no-sandbox",
+        "--disable-setuid-sandbox"
+      ]
+    }
+  },
+  "urls": [
+    "http://127.0.0.1:4173/login",
+    "http://127.0.0.1:4173/register",
+    "http://127.0.0.1:4173/404"
+  ]
+}

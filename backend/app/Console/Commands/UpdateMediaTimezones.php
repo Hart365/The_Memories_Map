@@ -10,17 +10,23 @@ class UpdateMediaTimezones extends Command
 {
     protected $signature = 'media:update-timezones 
                             {--force : Update even if timezone already set}
-                            {--limit= : Limit number of files to process}';
+                            {--limit= : Limit number of files to process}
+                            {--user-id= : Only process media belonging to this user ID}';
 
-    protected $description = 'Calculate and set timezone data for existing media files with GPS coordinates';
+    protected $description = 'Recalculate UTC/local capture times for existing media using user default timezone and media location timezone';
 
     public function handle(TimezoneService $timezoneService): int
     {
         $this->info('🌍 Updating media file timezones...');
 
-        $query = MediaFile::whereNotNull('latitude')
-            ->whereNotNull('longitude')
+        $query = MediaFile::with('map.user')
             ->whereNotNull('captured_at');
+
+        if ($userId = $this->option('user-id')) {
+            $query->whereHas('map', function ($q) use ($userId) {
+                $q->where('user_id', (int) $userId);
+            });
+        }
 
         if (!$this->option('force')) {
             $query->whereNull('timezone');
@@ -45,37 +51,49 @@ class UpdateMediaTimezones extends Command
         $updated = 0;
         $skipped = 0;
         $failed = 0;
+        $totalDifferenceMinutes = 0;
 
         foreach ($media as $file) {
             try {
-                $tzData = $timezoneService->getTimezoneFromCoordinates(
-                    $file->latitude,
-                    $file->longitude
-                );
+                $sourceTimezone = $file->map?->user?->default_timezone ?? TimezoneService::DEFAULT_TIMEZONE;
 
-                if (!$tzData) {
+                $tzData = null;
+                if ($file->latitude !== null && $file->longitude !== null) {
+                    $tzData = $timezoneService->getTimezoneFromCoordinates(
+                        $file->latitude,
+                        $file->longitude
+                    );
+                }
+
+                $targetTimezone = $tzData['timezone'] ?? $file->timezone ?? $sourceTimezone;
+
+                $dateStr = data_get($file->exif_json, 'EXIF.DateTimeOriginal')
+                    ?? data_get($file->exif_json, 'IFD0.DateTime');
+
+                $capturedAtUtc = null;
+                if (is_string($dateStr) && preg_match('/^\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2}$/', $dateStr)) {
+                    $capturedAtUtc = $timezoneService->parseCameraLocalToUtc($dateStr, $sourceTimezone);
+                } elseif ($file->captured_at) {
+                    $capturedAtUtc = $file->captured_at->copy()->setTimezone('UTC');
+                }
+
+                if (!$capturedAtUtc) {
                     $skipped++;
                     $bar->advance();
                     continue;
                 }
 
-                // Convert UTC captured_at to local time
-                $localTime = null;
-                if ($file->captured_at) {
-                    $utcTime = $file->captured_at->toDateTime();
-                    $localDateTime = $timezoneService->convertToLocalTime($utcTime, $tzData['timezone']);
-                    
-                    if ($localDateTime) {
-                        $localTime = \Carbon\Carbon::instance($localDateTime);
-                    }
-                }
+                $sourceLocal = $capturedAtUtc->copy()->setTimezone($sourceTimezone);
+                $locationLocal = $capturedAtUtc->copy()->setTimezone($targetTimezone);
 
                 $file->update([
-                    'timezone' => $tzData['timezone'],
-                    'timezone_offset' => $tzData['offset'],
-                    'captured_at_local' => $localTime,
+                    'captured_at' => $capturedAtUtc,
+                    'timezone' => $targetTimezone,
+                    'timezone_offset' => $locationLocal->utcOffset(),
+                    'captured_at_local' => $sourceLocal,
                 ]);
 
+                $totalDifferenceMinutes += ($locationLocal->utcOffset() - $sourceLocal->utcOffset());
                 $updated++;
             } catch (\Throwable $e) {
                 $this->error("\nFailed to update media ID {$file->id}: {$e->getMessage()}");
@@ -89,8 +107,12 @@ class UpdateMediaTimezones extends Command
         $this->newLine(2);
 
         $this->info("✅ Updated: {$updated}");
+        if ($updated > 0) {
+            $avgDiff = round($totalDifferenceMinutes / $updated, 1);
+            $this->info("ℹ️  Average source→location offset delta (minutes): {$avgDiff}");
+        }
         if ($skipped > 0) {
-            $this->warn("⚠️  Skipped (no timezone found): {$skipped}");
+            $this->warn("⚠️  Skipped (missing source timestamp): {$skipped}");
         }
         if ($failed > 0) {
             $this->error("❌ Failed: {$failed}");

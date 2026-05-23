@@ -41,7 +41,7 @@ class MapController extends Controller
     public function show(Request $request, MemoriesMap $map): JsonResponse
     {
         $this->authorize('view', $map);
-        $map->load(['colorTheme', 'mediaFiles', 'notes']);
+        $map->load('colorTheme')->loadCount('mediaFiles');
 
         return response()->json($map);
     }

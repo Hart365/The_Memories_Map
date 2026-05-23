@@ -1,9 +1,19 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import { notifications } from '@mantine/notifications'
+import {
+  Button,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  TextInput,
+  Textarea,
+  useComputedColorScheme,
+} from '@mantine/core'
 import api from '@/lib/api'
 import type { MapNote } from '@/types'
-import styles from './NoteEditor.module.css'
+import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 
 interface Props {
   mapId: number
@@ -16,6 +26,10 @@ export default function NoteEditor({ mapId, mediaId, noteType }: Props) {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
+  const isDark = useComputedColorScheme('light') === 'dark'
+
+  const surface = isDark ? '#1a2028' : '#ffffff'
+  const border = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)'
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -30,66 +44,75 @@ export default function NoteEditor({ mapId, mediaId, noteType }: Props) {
       setOpen(false)
       setTitle('')
       setBody('')
-      toast.success('Note saved.')
+      notifications.show({ message: 'Note saved.', color: 'teal' })
     },
-    onError: () => toast.error('Failed to save note.'),
+    onError: () => notifications.show({ message: 'Failed to save note.', color: 'red' }),
   })
 
   if (!open) {
     return (
-      <button
+      <Button
         type="button"
-        className={`btn btn-secondary ${styles.addBtn}`}
+        variant="default"
+        styles={getMapSectionButtonStyles('gallery')}
+        size="sm"
         onClick={() => setOpen(true)}
         aria-expanded="false"
         aria-controls="note-editor-form"
       >
-        + Add note
-      </button>
+        Add note
+      </Button>
     )
   }
 
   return (
-    <div id="note-editor-form" className={`card ${styles.editor}`} role="region" aria-label="Note editor">
-      <h3 className={styles.editorTitle}>Add a note</h3>
+    <Paper
+      id="note-editor-form"
+      p="md"
+      radius="md"
+      role="region"
+      aria-label="Note editor"
+      style={{ backgroundColor: surface, border }}
+    >
+      <Text fw={700} size="sm" mb="sm" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+        Add a note
+      </Text>
       <form
         onSubmit={(e) => { e.preventDefault(); mutation.mutate() }}
         aria-label="Note form"
       >
-        <div className="form-group">
-          <label htmlFor="note-title" className="form-label">Title <span className={styles.optional}>(optional)</span></label>
-          <input
+        <Stack gap="sm">
+          <TextInput
             id="note-title"
-            type="text"
-            className="form-input"
+            label="Title"
+            description="Optional"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             maxLength={255}
           />
-        </div>
-        <div className="form-group">
-          <label htmlFor="note-body" className="form-label">Note <span aria-hidden="true">*</span></label>
-          <textarea
+          <Textarea
             id="note-body"
-            className="form-textarea"
+            label="Note"
+            required
+            aria-required="true"
             rows={4}
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            required
-            aria-required="true"
             maxLength={5000}
           />
-          <p className={styles.charCount} aria-live="polite" aria-atomic="true">
+          <Text size="xs" c="dimmed" aria-live="polite" aria-atomic="true">
             {body.length} / 5000
-          </p>
-        </div>
-        <div className={styles.actions}>
-          <button type="submit" className="btn btn-primary" disabled={!body.trim() || mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Save note'}
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => setOpen(false)}>Cancel</button>
-        </div>
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button type="button" variant="default" styles={getMapSectionButtonStyles('map')} onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="default" styles={getMapSectionButtonStyles('upload', 'solid')} disabled={!body.trim()} loading={mutation.isPending}>
+              Save note
+            </Button>
+          </Group>
+        </Stack>
       </form>
-    </div>
+    </Paper>
   )
 }

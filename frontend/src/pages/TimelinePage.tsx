@@ -1,326 +1,684 @@
-import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState, useMemo } from 'react'
-import { format, parseISO, differenceInMinutes, differenceInHours, differenceInDays } from 'date-fns'
-import { MapContainer, Marker, Popup, useMap } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { useState, useMemo, useCallback } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { format, parseISO, getYear, getMonth, getDate, getHours } from 'date-fns'
+import {
+  Container, Title, Text, Group, Stack, Box, Paper, Badge, Button,
+  Loader, useComputedColorScheme, SimpleGrid, Modal, Slider, Checkbox,
+} from '@mantine/core'
+import {
+  IconArrowLeft, IconMap, IconPhoto,
+  IconClock, IconChevronRight, IconUpload, IconEdit, IconTrash, IconSelectAll,
+} from '@tabler/icons-react'
+import { useDisclosure } from '@mantine/hooks'
+import { notifications } from '@mantine/notifications'
 import api from '@/lib/api'
 import { mediaThumbUrl } from '@/lib/mediaUrl'
 import type { MediaFile, MemoriesMap } from '@/types'
-import MapLayers from '@/components/map/MapLayers'
-import styles from './TimelinePage.module.css'
+import { YEAR_BAR_COLORS } from '@/styles/mantine-theme'
+import MediaUploader from '@/components/media/MediaUploader'
+import BulkEditModal from '@/components/media/BulkEditModal'
+import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
+import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { buildTimelineColorMap } from '@/lib/timelineColors'
 
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-})
+type DrillLevel = 'year' | 'month' | 'day' | 'hour'
 
-type ZoomLevel = 'day' | 'hour' | 'minute'
+const MONTH_NAMES = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+]
 
-interface TimelineEntry {
-  date: Date
-  dateKey: string
-  media: MediaFile[]
+function getMediaDate(m: MediaFile): Date | null {
+  const s = m.captured_at_local || m.captured_at
+  if (!s) return null
+  try { return parseISO(s) } catch { return null }
 }
 
-// Component to fit map bounds to filtered media
-function FitBounds({ media }: { media: MediaFile[] }) {
-  const map = useMap()
-  useEffect(() => {
-    const points = media.filter((m) => m.latitude && m.longitude)
-    if (points.length > 0) {
-      const bounds = L.latLngBounds(points.map((m) => [m.latitude!, m.longitude!]))
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 })
-    }
-  }, [media, map])
-  return null
+function parseParamInt(value: string | null): number | null {
+  if (value === null || value.trim() === '') return null
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+function formatDayLabel(day: number, year: number | null, month: number | null, pattern = 'MMM d'): string {
+  if (year === null || month === null) return String(day)
+  return format(new Date(year, month, day), pattern)
 }
 
 export default function TimelinePage() {
   const { mapId } = useParams<{ mapId: string }>()
   const navigate = useNavigate()
-  const [selectedEntry, setSelectedEntry] = useState<TimelineEntry | null>(null)
-  const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('day')
+  const qc = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const isDark = useComputedColorScheme('light') === 'dark'
+  const [uploaderOpen, { open: openUploader, close: closeUploader }] = useDisclosure(false)
+
+  const initialYearVal = parseParamInt(searchParams.get('year'))
+  const initialMonthVal = parseParamInt(searchParams.get('month'))
+  const initialDayVal = parseParamInt(searchParams.get('day'))
+
+  const [level, setLevel] = useState<DrillLevel>(
+    initialDayVal !== null ? 'hour' : initialMonthVal !== null ? 'day' : initialYearVal !== null ? 'month' : 'year',
+  )
+  const [selectedYear, setSelectedYear] = useState<number | null>(initialYearVal)
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(initialMonthVal) // 0-based
+  const [selectedDay, setSelectedDay] = useState<number | null>(initialDayVal)
+  const [thumbSize, setThumbSize] = useState(120)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [confirmBulkDeleteOpen, setConfirmBulkDeleteOpen] = useState(false)
+  const [bulkEditOpen, { open: openBulkEdit, close: closeBulkEdit }] = useDisclosure(false)
 
   const { data: map } = useQuery<MemoriesMap>({
     queryKey: ['map', mapId],
     queryFn: () => api.get(`/maps/${mapId}`).then((r) => r.data),
   })
 
-  const { data: allMedia = [] } = useQuery<MediaFile[]>({
+  const { data: allMedia = [], isLoading } = useQuery<MediaFile[]>({
     queryKey: ['media', mapId],
     queryFn: () => api.get(`/maps/${mapId}/media`).then((r) => r.data.data),
   })
 
-  // Filter media with dates
-  const mediaWithDates = useMemo(() => 
-    allMedia.filter((m) => m.captured_at),
-    [allMedia]
+  const mediaWithDates = useMemo(() =>
+    allMedia.filter((m) => getMediaDate(m) !== null),
+    [allMedia],
   )
 
-  // Group media by time bucket based on zoom level
-  const timelineEntries = useMemo<TimelineEntry[]>(() => {
-    if (mediaWithDates.length === 0) return []
-
-    const grouped = new Map<string, MediaFile[]>()
-
-    mediaWithDates.forEach((m) => {
-      // Use local time if available, otherwise fall back to UTC
-      const dateStr = m.captured_at_local || m.captured_at!
-      const date = parseISO(dateStr)
-      let key: string
-
-      switch (zoomLevel) {
-        case 'minute':
-          key = format(date, 'yyyy-MM-dd HH:mm')
-          break
-        case 'hour':
-          key = format(date, 'yyyy-MM-dd HH:00')
-          break
-        case 'day':
-        default:
-          key = format(date, 'yyyy-MM-dd')
-          break
-      }
-
-      if (!grouped.has(key)) {
-        grouped.set(key, [])
-      }
-      grouped.get(key)!.push(m)
-    })
-
-    return Array.from(grouped.entries())
-      .map(([dateKey, media]) => ({
-        dateKey,
-        date: parseISO(dateKey),
-        media,
-      }))
-      .sort((a, b) => b.date.getTime() - a.date.getTime())
-  }, [mediaWithDates, zoomLevel])
-
-  // Format date label based on zoom level
-  const formatDateLabel = (entry: TimelineEntry): string => {
-    switch (zoomLevel) {
-      case 'minute':
-        return format(entry.date, 'MMM d, yyyy h:mm a')
-      case 'hour':
-        return format(entry.date, 'MMM d, yyyy h:00 a')
-      case 'day':
-      default:
-        return format(entry.date, 'MMMM d, yyyy')
+  // Build year buckets
+  const yearBuckets = useMemo(() => {
+    const map_ = new Map<number, MediaFile[]>()
+    for (const m of mediaWithDates) {
+      const d = getMediaDate(m)!
+      const y = getYear(d)
+      if (!map_.has(y)) map_.set(y, [])
+      map_.get(y)!.push(m)
     }
-  }
-
-  const selectedMedia = selectedEntry?.media ?? []
-  const mediaWithLocation = selectedMedia.filter((m) => m.latitude !== null && m.longitude !== null)
-
-  // Calculate timeline statistics
-  const totalMediaCount = mediaWithDates.length
-  const timeSpan = useMemo(() => {
-    if (mediaWithDates.length < 2) return null
-    const dates = mediaWithDates.map((m) => parseISO(m.captured_at!))
-    const earliest = new Date(Math.min(...dates.map(d => d.getTime())))
-    const latest = new Date(Math.max(...dates.map(d => d.getTime())))
-    const days = differenceInDays(latest, earliest)
-    return { earliest, latest, days }
+    return Array.from(map_.entries()).sort((a, b) => a[0] - b[0])
   }, [mediaWithDates])
 
+  // Build month buckets for selected year
+  const monthBuckets = useMemo(() => {
+    if (selectedYear === null) return []
+    const yearMedia = yearBuckets.find(([y]) => y === selectedYear)?.[1] ?? []
+    const map_ = new Map<number, MediaFile[]>()
+    for (const m of yearMedia) {
+      const d = getMediaDate(m)!
+      const mo = getMonth(d)
+      if (!map_.has(mo)) map_.set(mo, [])
+      map_.get(mo)!.push(m)
+    }
+    return Array.from(map_.entries()).sort((a, b) => a[0] - b[0])
+  }, [yearBuckets, selectedYear])
+
+  // Build day buckets
+  const dayBuckets = useMemo(() => {
+    if (selectedYear === null || selectedMonth === null) return []
+    const monthMedia = monthBuckets.find(([mo]) => mo === selectedMonth)?.[1] ?? []
+    const map_ = new Map<number, MediaFile[]>()
+    for (const m of monthMedia) {
+      const d = getMediaDate(m)!
+      const day = getDate(d)
+      if (!map_.has(day)) map_.set(day, [])
+      map_.get(day)!.push(m)
+    }
+    return Array.from(map_.entries()).sort((a, b) => a[0] - b[0])
+  }, [monthBuckets, selectedYear, selectedMonth])
+
+  // Build hour buckets
+  const hourBuckets = useMemo(() => {
+    if (selectedYear === null || selectedMonth === null || selectedDay === null) return []
+    const dayMedia = dayBuckets.find(([d]) => d === selectedDay)?.[1] ?? []
+    const map_ = new Map<number, MediaFile[]>()
+    for (const m of dayMedia) {
+      const d = getMediaDate(m)!
+      const hr = getHours(d)
+      if (!map_.has(hr)) map_.set(hr, [])
+      map_.get(hr)!.push(m)
+    }
+    return Array.from(map_.entries()).sort((a, b) => a[0] - b[0])
+  }, [dayBuckets, selectedYear, selectedMonth, selectedDay])
+
+  const surface = isDark ? '#1a2028' : '#ffffff'
+  const border = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)'
+  const brand = isDark ? '#22d3e0' : '#005f63'
+  const hourGridCols = thumbSize <= 88 ? 6 : thumbSize <= 108 ? 5 : thumbSize <= 132 ? 4 : 3
+
+  const maxYearCount = Math.max(1, ...yearBuckets.map(([,m]) => m.length))
+  const yearColorMap = useMemo(() => buildTimelineColorMap(yearBuckets.map(([value]) => value)), [yearBuckets])
+  const monthColorMap = useMemo(() => buildTimelineColorMap(monthBuckets.map(([value]) => value)), [monthBuckets])
+  const dayColorMap = useMemo(() => buildTimelineColorMap(dayBuckets.map(([value]) => value)), [dayBuckets])
+  const hourColorMap = useMemo(() => buildTimelineColorMap(hourBuckets.map(([value]) => value)), [hourBuckets])
+
+  const handleDrillYear = (year: number) => {
+    setSelectedYear(year)
+    setSelectedMonth(null)
+    setSelectedDay(null)
+    setLevel('month')
+  }
+  const handleDrillMonth = (month: number) => {
+    setSelectedMonth(month)
+    setSelectedDay(null)
+    setLevel('day')
+  }
+  const handleDrillDay = (day: number) => {
+    setSelectedDay(day)
+    setLevel('hour')
+  }
+  const handleBack = () => {
+    if (level === 'month') { setLevel('year'); setSelectedYear(null) }
+    else if (level === 'day') { setLevel('month'); setSelectedMonth(null) }
+    else if (level === 'hour') { setLevel('day'); setSelectedDay(null) }
+  }
+
+  const breadcrumb = [
+    { label: 'All Years', active: level === 'year' },
+    selectedYear !== null ? { label: String(selectedYear), active: level === 'month' } : null,
+    selectedMonth !== null ? { label: MONTH_NAMES[selectedMonth], active: level === 'day' } : null,
+    selectedDay !== null ? { label: formatDayLabel(selectedDay, selectedYear, selectedMonth, 'MMM d, yyyy'), active: level === 'hour' } : null,
+  ].filter(Boolean) as { label: string; active: boolean }[]
+
+  const overviewItems = useMemo(() => {
+    if (level === 'year') {
+      return yearBuckets.map(([value, items], index) => ({
+        key: `year-${value}`,
+        label: String(value),
+        count: items.length,
+        color: yearColorMap.get(value) ?? YEAR_BAR_COLORS[index % YEAR_BAR_COLORS.length],
+        onClick: () => {
+          setSelectedYear(value)
+          setSelectedMonth(null)
+          setSelectedDay(null)
+          setLevel('month')
+        },
+      }))
+    }
+
+    if (level === 'month') {
+      return monthBuckets.map(([value, items], index) => ({
+        key: `month-${value}`,
+        label: MONTH_NAMES[value].slice(0, 3),
+        count: items.length,
+        color: monthColorMap.get(value) ?? YEAR_BAR_COLORS[index % YEAR_BAR_COLORS.length],
+        onClick: () => {
+          setSelectedMonth(value)
+          setSelectedDay(null)
+          setLevel('day')
+        },
+      }))
+    }
+
+    if (level === 'day') {
+      return dayBuckets.map(([value, items], index) => ({
+        key: `day-${value}`,
+        label: formatDayLabel(value, selectedYear, selectedMonth),
+        count: items.length,
+        color: dayColorMap.get(value) ?? YEAR_BAR_COLORS[index % YEAR_BAR_COLORS.length],
+        onClick: () => {
+          setSelectedDay(value)
+          setLevel('hour')
+        },
+      }))
+    }
+
+    return hourBuckets.map(([value, items], index) => ({
+      key: `hour-${value}`,
+      label: `${value.toString().padStart(2, '0')}:00`,
+      count: items.length,
+      color: hourColorMap.get(value) ?? YEAR_BAR_COLORS[index % YEAR_BAR_COLORS.length],
+      onClick: () => {
+        if (items[0]) navigate(`/maps/${mapId}/media/${items[0].id}`)
+      },
+    }))
+  }, [dayBuckets, dayColorMap, hourBuckets, hourColorMap, level, mapId, monthBuckets, monthColorMap, navigate, selectedMonth, selectedYear, yearBuckets, yearColorMap])
+
+  const maxOverviewCount = Math.max(1, ...overviewItems.map((item) => item.count))
+  const overviewLabel = level === 'year'
+    ? 'Years in this map'
+    : level === 'month'
+      ? 'Months in selected year'
+      : level === 'day'
+        ? 'Days in selected month'
+        : 'Hours in selected day'
+
+  const visibleHourMedia = useMemo(
+    () => (level === 'hour' ? hourBuckets.flatMap(([, items]) => items) : []),
+    [hourBuckets, level],
+  )
+
+  const selectedMedia = useMemo(
+    () => visibleHourMedia.filter((m) => selectedIds.has(m.id)),
+    [selectedIds, visibleHourMedia],
+  )
+
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const selectAllVisible = useCallback(() => {
+    setSelectedIds(new Set(visibleHourMedia.map((m) => m.id)))
+  }, [visibleHourMedia])
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedIds.size === 0) return
+    try {
+      await Promise.all(Array.from(selectedIds).map((id) => api.delete(`/maps/${mapId}/media/${id}`)))
+      notifications.show({ message: 'Selected media deleted.', color: 'teal' })
+      setSelectedIds(new Set())
+      qc.invalidateQueries({ queryKey: ['media', mapId] })
+    } catch {
+      notifications.show({ message: 'Some media could not be deleted.', color: 'red' })
+      qc.invalidateQueries({ queryKey: ['media', mapId] })
+    }
+  }, [mapId, qc, selectedIds])
+
   return (
-    <section aria-labelledby="timeline-heading" className={styles.page}>
-      <div className={styles.header}>
-        <div>
-          <h1 id="timeline-heading" className={styles.title}>
-            <span className={styles.icon} aria-hidden="true">📅</span>
-            Timeline – {map?.name}
-          </h1>
-          {timeSpan && (
-            <p className={styles.subtitle}>
-              {totalMediaCount} memories spanning {timeSpan.days} days 
-              ({format(timeSpan.earliest, 'MMM yyyy')} – {format(timeSpan.latest, 'MMM yyyy')})
-            </p>
-          )}
-        </div>
+    <Container size="xl" py="lg">
+      {/* Header */}
+      <Group justify="space-between" mb="lg" wrap="wrap" gap="sm">
+        <Box>
+          <Title order={1} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+            Timeline
+          </Title>
+          <Text c="dimmed" size="sm">
+            {map?.name} • {mediaWithDates.length} items with dates
+          </Text>
+        </Box>
+        <Group gap="xs">
+          <Button variant="default" size="sm" styles={getMapSectionButtonStyles('consolidated')} leftSection={<IconMap size={16} aria-hidden />}
+            onClick={() => navigate(`/maps/${mapId}/consolidated`)}>Consolidated</Button>
+          <Button variant="default" size="sm" styles={getMapSectionButtonStyles('timeline', 'solid')} leftSection={<IconClock size={16} aria-hidden />}
+            aria-current="page">Timeline</Button>
+          <Button variant="default" size="sm" styles={getMapSectionButtonStyles('map')} leftSection={<IconMap size={16} aria-hidden />}
+            onClick={() => navigate(`/maps/${mapId}/map`)}>Map</Button>
+          <Button variant="default" size="sm" styles={getMapSectionButtonStyles('gallery')} leftSection={<IconPhoto size={16} aria-hidden />}
+            onClick={() => navigate(`/maps/${mapId}/gallery`)}>Gallery</Button>
+          <Button variant="default" size="sm" styles={getMapSectionButtonStyles('upload', 'solid')} leftSection={<IconUpload size={16} aria-hidden />}
+            onClick={openUploader}>Upload</Button>
+        </Group>
+      </Group>
 
-        <div className={styles.headerActions}>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => navigate(`/maps/${mapId}`)}
-            aria-label="Back to map view"
-          >
-            🗺️ Map View
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => navigate(`/maps/${mapId}/gallery`)}
-            aria-label="Gallery view"
-          >
-            🖼️ Gallery
-          </button>
-
-          {mediaWithDates.length > 0 && (
-            <div className={styles.zoomControls} role="group" aria-label="Timeline zoom level">
-              <button
-                type="button"
-                className={`${styles.zoomBtn} ${zoomLevel === 'day' ? styles.zoomBtnActive : ''}`}
-                onClick={() => setZoomLevel('day')}
-                aria-pressed={zoomLevel === 'day'}
-              >
-                Days
-              </button>
-              <button
-                type="button"
-                className={`${styles.zoomBtn} ${zoomLevel === 'hour' ? styles.zoomBtnActive : ''}`}
-                onClick={() => setZoomLevel('hour')}
-                aria-pressed={zoomLevel === 'hour'}
-              >
-                Hours
-              </button>
-              <button
-                type="button"
-                className={`${styles.zoomBtn} ${zoomLevel === 'minute' ? styles.zoomBtnActive : ''}`}
-                onClick={() => setZoomLevel('minute')}
-                aria-pressed={zoomLevel === 'minute'}
-              >
-                Minutes
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {mediaWithDates.length === 0 ? (
-        <div className={styles.empty}>
-          <p className={styles.emptyIcon} aria-hidden="true">📸</p>
-          <h2 className={styles.emptyTitle}>No timeline data yet</h2>
-          <p className={styles.emptyText}>
-            Upload media with date information to see it appear on the timeline.
-          </p>
-        </div>
-      ) : (
-        <div className={styles.layout}>
-          {/* Vertical Timeline */}
-          <nav aria-label="Timeline entries" className={styles.timeline}>
-            <div className={styles.timelineLine} aria-hidden="true" />
-            <ul role="list" className={styles.timelineList}>
-              {timelineEntries.map((entry) => (
-                <li key={entry.dateKey} className={styles.timelineItem}>
-                  <button
-                    type="button"
-                    className={`${styles.timelineBtn} ${selectedEntry?.dateKey === entry.dateKey ? styles.timelineBtnActive : ''}`}
-                    onClick={() => setSelectedEntry(entry.dateKey === selectedEntry?.dateKey ? null : entry)}
-                    aria-pressed={selectedEntry?.dateKey === entry.dateKey}
-                    aria-label={`${formatDateLabel(entry)} – ${entry.media.length} ${entry.media.length === 1 ? 'item' : 'items'}`}
-                  >
-                    <div className={styles.timelineDot} aria-hidden="true">
-                      <span className={styles.dotInner}>{entry.media.length}</span>
-                    </div>
-                    <div className={styles.timelineContent}>
-                      <span className={styles.timelineDate}>{formatDateLabel(entry)}</span>
-                      <span className={styles.timelineCount}>
-                        {entry.media.length} {entry.media.length === 1 ? 'memory' : 'memories'}
-                      </span>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          {/* Detail View */}
-          <div className={styles.detail} aria-live="polite">
-            {selectedEntry ? (
-              <>
-                <h2 className={styles.detailTitle}>{formatDateLabel(selectedEntry)}</h2>
-
-                {/* Map */}
-                {mediaWithLocation.length > 0 && (
-                  <div className={styles.mapContainer} aria-label={`Map showing ${mediaWithLocation.length} locations`}>
-                    <MapContainer 
-                      center={[mediaWithLocation[0].latitude!, mediaWithLocation[0].longitude!]} 
-                      zoom={10} 
-                      style={{ width: '100%', height: '100%' }}
-                    >
-                      <MapLayers />
-                      <FitBounds media={mediaWithLocation} />
-                      {mediaWithLocation.map((m) => (
-                        <Marker key={m.id} position={[m.latitude!, m.longitude!]}>
-                          <Popup>
-                            <div className={styles.popup}>
-                              {m.thumbnail_name && (
-                                <img
-                                  src={mediaThumbUrl(mapId!, m.id)}
-                                  alt={m.user_caption ?? m.original_name}
-                                  className={styles.popupThumb}
-                                  loading="lazy"
-                                />
-                              )}
-                              <p className={styles.popupCaption}>{m.user_caption ?? m.original_name}</p>
-                              {m.location_name && (
-                                <p className={styles.popupLocation}>📍 {m.location_name}</p>
-                              )}
-                            </div>
-                          </Popup>
-                        </Marker>
-                      ))}
-                    </MapContainer>
-                  </div>
-                )}
-
-                {/* Media Grid */}
-                <div className={styles.mediaSection}>
-                  <h3 className={styles.mediaSectionTitle}>
-                    Media ({selectedMedia.length})
-                  </h3>
-                  <ul className={styles.mediaGrid} role="list">
-                    {selectedMedia.map((m) => (
-                      <li key={m.id} className={styles.mediaCard}>
-                        <a href={`/maps/${mapId}/media/${m.id}`} className={styles.mediaLink}>
-                          {m.thumbnail_name ? (
-                            <img
-                              src={mediaThumbUrl(mapId!, m.id)}
-                              alt={m.user_caption ?? m.original_name}
-                              loading="lazy"
-                              className={styles.mediaThumb}
-                            />
-                          ) : (
-                            <div className={styles.mediaPlaceholder} aria-hidden="true">
-                              {m.mime_type.startsWith('video/') ? '▶' : '🖼'}
-                            </div>
-                          )}
-                          <div className={styles.mediaInfo}>
-                            <p className={styles.mediaName}>{m.user_caption ?? m.original_name}</p>
-                            {m.captured_at && (
-                              <p className={styles.mediaTime}>
-                                {format(parseISO(m.captured_at_local || m.captured_at), 'h:mm a')}
-                              </p>
-                            )}
-                            {m.location_name && (
-                              <p className={styles.mediaLocation}>📍 {m.location_name}</p>
-                            )}
-                          </div>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </>
-            ) : (
-              <div className={styles.selectPrompt}>
-                <p className={styles.promptIcon} aria-hidden="true">👈</p>
-                <h2 className={styles.promptTitle}>Select a timeline entry</h2>
-                <p className={styles.promptText}>
-                  Choose a date from the timeline to view media and see locations on the map.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+      {isLoading && (
+        <Box ta="center" py="xl"><Loader color="teal" size="lg" aria-label="Loading timeline" /></Box>
       )}
-    </section>
+
+      {!isLoading && mediaWithDates.length === 0 && (
+        <Paper p="xl" radius="lg" style={{ backgroundColor: surface, border, textAlign: 'center' }}>
+          <Text c="dimmed" size="lg">No dated media found. Upload photos with timestamps to populate the timeline.</Text>
+        </Paper>
+      )}
+
+      {!isLoading && mediaWithDates.length > 0 && (
+        <Stack gap="lg">
+          <Paper p="md" radius="md" style={{ backgroundColor: surface, border }} aria-label="Interactive media overview">
+            <Text fw={700} size="sm" mb="xs" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+              Media Overview
+            </Text>
+            <Text size="xs" c="dimmed" mb="sm">
+              {overviewLabel}. Click a bar to drill down or open media at the hour level.
+            </Text>
+            <Stack gap={6}>
+              {overviewItems.map((item) => {
+                const widthPct = Math.max(8, (item.count / maxOverviewCount) * 100)
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={item.onClick}
+                    style={{
+                      border: 'none',
+                      background: 'none',
+                      padding: 0,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                    }}
+                    aria-label={`${item.label}: ${item.count} item${item.count !== 1 ? 's' : ''}`}
+                  >
+                    <Group gap="xs" align="center" wrap="nowrap">
+                      <Text size="xs" fw={700} style={{ width: 58, flexShrink: 0 }}>{item.label}</Text>
+                      <Box
+                        style={{
+                          width: `${widthPct}%`,
+                          minWidth: 12,
+                          height: 26,
+                          borderRadius: 6,
+                          backgroundColor: item.color,
+                          opacity: 0.92,
+                        }}
+                        aria-hidden
+                      />
+                      <Badge size="sm" color="teal" variant="light">{item.count}</Badge>
+                    </Group>
+                  </button>
+                )
+              })}
+            </Stack>
+          </Paper>
+
+          <Paper p="md" radius="md" style={{ backgroundColor: surface, border }} aria-label="Vertical timeline markers">
+            <Text fw={700} size="sm" mb="sm" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+              Timeline Vertical
+            </Text>
+            <Stack gap="xs">
+              {(level === 'year' ? yearBuckets : level === 'month' ? monthBuckets : level === 'day' ? dayBuckets : hourBuckets)
+                .slice(0, 14)
+                .map(([value, items], idx) => (
+                  <Group key={`${level}-${value}`} gap="xs" wrap="nowrap">
+                    <Box
+                      aria-hidden
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: 999,
+                        backgroundColor: level === 'year'
+                          ? (yearColorMap.get(value) ?? YEAR_BAR_COLORS[idx % YEAR_BAR_COLORS.length])
+                          : level === 'month'
+                            ? (monthColorMap.get(value) ?? YEAR_BAR_COLORS[idx % YEAR_BAR_COLORS.length])
+                            : level === 'day'
+                              ? (dayColorMap.get(value) ?? YEAR_BAR_COLORS[idx % YEAR_BAR_COLORS.length])
+                              : (hourColorMap.get(value) ?? YEAR_BAR_COLORS[idx % YEAR_BAR_COLORS.length]),
+                        boxShadow: `0 0 0 3px ${isDark ? 'rgba(34,211,224,0.18)' : 'rgba(0,95,99,0.14)'}`,
+                      }}
+                    />
+                    <Text size="sm" fw={600} style={{ color: isDark ? '#dbeaf2' : '#1a1f2e' }}>
+                      {level === 'year' ? String(value)
+                        : level === 'month' ? MONTH_NAMES[value].slice(0, 3)
+                          : level === 'day' ? formatDayLabel(value, selectedYear, selectedMonth)
+                            : `${String(value).padStart(2, '0')}:00`}
+                    </Text>
+                    <Badge variant="light" color="teal">{items.length}</Badge>
+                  </Group>
+                ))}
+            </Stack>
+          </Paper>
+
+          {/* Breadcrumb / drill-down nav */}
+          <Paper p="sm" radius="md" style={{ backgroundColor: surface, border }}>
+            <Group gap="xs" wrap="wrap" align="center">
+              {level !== 'year' && (
+                <Button variant="subtle" color="teal" size="xs" leftSection={<IconArrowLeft size={14} aria-hidden />}
+                  onClick={handleBack} aria-label="Go back one level">Back</Button>
+              )}
+              {breadcrumb.map((crumb, i) => (
+                <Group key={crumb.label} gap="xs">
+                  {i > 0 && <IconChevronRight size={14} color="#aaa" aria-hidden />}
+                  <Badge
+                    variant={crumb.active ? 'filled' : 'light'}
+                    color="teal"
+                    size="lg"
+                    style={{ cursor: 'default' }}
+                  >
+                    {crumb.label}
+                  </Badge>
+                </Group>
+              ))}
+            </Group>
+          </Paper>
+
+          {/* ── YEAR LEVEL ─────────────────────────────────────────────────── */}
+          {level === 'year' && (
+            <Box>
+              <Text fw={700} size="lg" mb="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                Select a Year
+              </Text>
+              <Stack gap="sm">
+                {yearBuckets.map(([year, media_], i) => {
+                  const barPct = Math.max(8, (media_.length / maxYearCount) * 100)
+                  const color = yearColorMap.get(year) ?? YEAR_BAR_COLORS[i % YEAR_BAR_COLORS.length]
+                  return (
+                    <Paper key={year} shadow="xs" radius="md"
+                      style={{ backgroundColor: surface, border, overflow: 'hidden', cursor: 'pointer' }}
+                      onClick={() => handleDrillYear(year)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleDrillYear(year)}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${year}: ${media_.length} media. Press Enter to explore.`}
+                    >
+                      <Group gap={0} wrap="nowrap" style={{ height: 56 }}>
+                        {/* Colored bar */}
+                        <Box style={{ width: `${barPct}%`, minWidth: 8, height: '100%',
+                          backgroundColor: color, flexShrink: 0, transition: 'width 0.3s' }} aria-hidden />
+                        {/* Label */}
+                        <Group px="md" justify="space-between" style={{ flex: 1, minWidth: 0 }}>
+                          <Text fw={700} size="lg" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                            {year}
+                          </Text>
+                          <Group gap="xs">
+                            <Badge variant="light" color="teal">{media_.length} items</Badge>
+                            <IconChevronRight size={18} color={brand} aria-hidden />
+                          </Group>
+                        </Group>
+                      </Group>
+                    </Paper>
+                  )
+                })}
+              </Stack>
+            </Box>
+          )}
+
+          {/* ── MONTH LEVEL ───────────────────────────────────────────────── */}
+          {level === 'month' && selectedYear !== null && (
+            <Box>
+              <Text fw={700} size="lg" mb="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                {selectedYear} — Select a Month
+              </Text>
+              <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 6 }} spacing="sm">
+                {monthBuckets.map(([month, media_]) => {
+                  const color = monthColorMap.get(month) ?? YEAR_BAR_COLORS[month % YEAR_BAR_COLORS.length]
+                  return (
+                    <Paper key={month} shadow="xs" radius="lg" p="md" style={{ backgroundColor: surface, border,
+                      cursor: 'pointer', textAlign: 'center', borderLeft: `4px solid ${color}` }}
+                      onClick={() => handleDrillMonth(month)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleDrillMonth(month)}
+                      tabIndex={0} role="button"
+                      aria-label={`${MONTH_NAMES[month]}: ${media_.length} items`}
+                    >
+                      <Text fw={700} size="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                        {MONTH_NAMES[month].slice(0, 3)}
+                      </Text>
+                      <Badge mt={4} variant="light" color="teal" size="sm">{media_.length}</Badge>
+                    </Paper>
+                  )
+                })}
+              </SimpleGrid>
+            </Box>
+          )}
+
+          {/* ── DAY LEVEL ─────────────────────────────────────────────────── */}
+          {level === 'day' && selectedYear !== null && selectedMonth !== null && (
+            <Box>
+              <Text fw={700} size="lg" mb="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                {MONTH_NAMES[selectedMonth]} {selectedYear} — Select a Day
+              </Text>
+              <SimpleGrid cols={{ base: 3, sm: 5, md: 7 }} spacing="sm">
+                {dayBuckets.map(([day, media_]) => {
+                  const color = dayColorMap.get(day) ?? YEAR_BAR_COLORS[day % YEAR_BAR_COLORS.length]
+                  return (
+                    <Paper key={day} shadow="xs" radius="md" p="sm" style={{ backgroundColor: surface, border,
+                      cursor: 'pointer', textAlign: 'center', borderTop: `3px solid ${color}` }}
+                      onClick={() => handleDrillDay(day)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleDrillDay(day)}
+                      tabIndex={0} role="button"
+                      aria-label={`${formatDayLabel(day, selectedYear, selectedMonth, 'MMMM d, yyyy')}: ${media_.length} items`}
+                    >
+                      <Text fw={700} size="sm" c="dimmed" style={{ lineHeight: 1.1 }}>
+                        {formatDayLabel(day, selectedYear, selectedMonth, 'EEE')}
+                      </Text>
+                      <Text fw={700} size="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e', lineHeight: 1.2 }}>
+                        {formatDayLabel(day, selectedYear, selectedMonth, 'MMM d')}
+                      </Text>
+                      <Badge mt={4} variant="light" color="teal" size="xs">{media_.length}</Badge>
+                    </Paper>
+                  )
+                })}
+              </SimpleGrid>
+            </Box>
+          )}
+
+          {/* ── HOUR LEVEL ────────────────────────────────────────────────── */}
+          {level === 'hour' && selectedDay !== null && (
+            <Box>
+              <Text fw={700} size="lg" mb="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                {MONTH_NAMES[selectedMonth!]} {selectedDay}, {selectedYear} — Hours
+              </Text>
+              <Paper p="sm" radius="md" mb="md" style={{ backgroundColor: surface, border }}>
+                <Group justify="space-between" gap="sm" wrap="wrap" align="center">
+                  <Group gap="xs" style={{ minWidth: 220, flex: 1 }}>
+                    <Text size="xs" fw={700}>Thumbnail size</Text>
+                    <Slider
+                      min={72}
+                      max={160}
+                      step={4}
+                      value={thumbSize}
+                      onChange={setThumbSize}
+                      style={{ flex: 1 }}
+                      label={(v) => `${v}px`}
+                      aria-label="Timeline thumbnail size"
+                    />
+                  </Group>
+                  <Group gap="xs">
+                    <Button size="xs" variant="subtle" leftSection={<IconSelectAll size={14} aria-hidden />} onClick={selectAllVisible}>
+                      Select all visible
+                    </Button>
+                    <Button size="xs" variant="subtle" color="gray" onClick={clearSelection}>Clear</Button>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="teal"
+                      disabled={selectedIds.size === 0}
+                      leftSection={<IconEdit size={14} aria-hidden />}
+                      onClick={openBulkEdit}
+                    >
+                      Batch edit ({selectedIds.size})
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="light"
+                      color="red"
+                      disabled={selectedIds.size === 0}
+                      leftSection={<IconTrash size={14} aria-hidden />}
+                      onClick={() => setConfirmBulkDeleteOpen(true)}
+                    >
+                      Batch delete
+                    </Button>
+                  </Group>
+                </Group>
+              </Paper>
+              <Stack gap="lg">
+                {hourBuckets.map(([hour, media_]) => (
+                  <Box key={hour}>
+                    <Group gap="sm" mb="sm">
+                      <IconClock size={20} color={brand} aria-hidden />
+                      <Text fw={700} size="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                        {hour.toString().padStart(2, '0')}:00 – {(hour + 1).toString().padStart(2, '0')}:00
+                      </Text>
+                      <Badge variant="light" color="teal">{media_.length} item{media_.length !== 1 ? 's' : ''}</Badge>
+                    </Group>
+                    <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: hourGridCols }} spacing="sm">
+                      {media_.map((m) => (
+                        <Paper key={m.id} radius="md" style={{ overflow: 'hidden', cursor: 'pointer', backgroundColor: surface, border, position: 'relative' }}>
+                          <Box style={{ position: 'absolute', top: 6, left: 6, zIndex: 2 }}>
+                            <Checkbox
+                              checked={selectedIds.has(m.id)}
+                              onChange={() => toggleSelect(m.id)}
+                              aria-label={`Select ${m.original_name}`}
+                              radius="sm"
+                            />
+                          </Box>
+                          <Box
+                            onClick={() => navigate(`/maps/${mapId}/media/${m.id}`)}
+                            onKeyDown={(e) => e.key === 'Enter' && navigate(`/maps/${mapId}/media/${m.id}`)}
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`${m.original_name}. Captured ${m.captured_at ? format(parseISO(m.captured_at), 'h:mm a') : ''}`}
+                          >
+                          {m.thumbnail_name ? (
+                            <img src={mediaThumbUrl(mapId!, m.id)}
+                              alt={m.original_name}
+                              style={{ width: '100%', height: thumbSize, objectFit: 'cover', display: 'block' }} />
+                          ) : (
+                            <Box style={{ width: '100%', height: thumbSize, backgroundColor: isDark ? '#2a3340' : '#f0f4f8',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <IconPhoto size={32} color={brand} aria-hidden />
+                            </Box>
+                          )}
+                          <Box p="xs">
+                            <Text size="xs" fw={600} lineClamp={1} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                              {m.user_caption || m.location_name || m.location_city || 'Place unavailable'}
+                            </Text>
+                            <Text size="xs" c="dimmed" lineClamp={1}>
+                              {m.location_name || m.location_city || 'Place unavailable'}
+                            </Text>
+                            {m.captured_at && (
+                              <Text size="xs" c="dimmed">
+                                {format(parseISO(m.captured_at_local || m.captured_at), 'PPp')}
+                              </Text>
+                            )}
+                          </Box>
+                          </Box>
+                        </Paper>
+                      ))}
+                    </SimpleGrid>
+                  </Box>
+                ))}
+              </Stack>
+            </Box>
+          )}
+        </Stack>
+      )}
+
+      <Modal
+        opened={uploaderOpen}
+        onClose={() => {
+          closeUploader()
+          qc.invalidateQueries({ queryKey: ['media', mapId] })
+        }}
+        title={<Text fw={700}>Upload Media</Text>}
+        size="lg"
+        radius="lg"
+        centered
+      >
+        <MediaUploader
+          mapId={mapId!}
+          onUploadComplete={() => {
+            closeUploader()
+            qc.invalidateQueries({ queryKey: ['media', mapId] })
+          }}
+        />
+      </Modal>
+
+      <BulkEditModal
+        opened={bulkEditOpen}
+        onClose={closeBulkEdit}
+        mapId={mapId!}
+        selectedMedia={selectedMedia}
+        onSaved={() => {
+          closeBulkEdit()
+          setSelectedIds(new Set())
+          qc.invalidateQueries({ queryKey: ['media', mapId] })
+        }}
+      />
+
+      <NativeConfirmDialog
+        opened={confirmBulkDeleteOpen}
+        title="Delete selected media?"
+        message={`Delete ${selectedIds.size} selected item${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel="Delete"
+        tone="danger"
+        onCancel={() => setConfirmBulkDeleteOpen(false)}
+        onConfirm={() => {
+          setConfirmBulkDeleteOpen(false)
+          void handleBulkDelete()
+        }}
+      />
+    </Container>
   )
 }
