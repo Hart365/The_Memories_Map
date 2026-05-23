@@ -80,6 +80,36 @@ export interface MapGuest {
   invited_at: string
   expires_at: string | null
   last_accessed_at: string | null
+  share_url?: string
+}
+
+export interface SharedMediaFile {
+  id: number
+  map_id: number
+  original_name: string
+  size_bytes: number | null
+  latitude: number | null
+  longitude: number | null
+  location_name: string | null
+  location_city: string | null
+  captured_at: string | null
+  captured_at_local: string | null
+  timezone: string | null
+  thumbnail_name: string | null
+  user_caption: string | null
+  mime_type: string
+  width: number | null
+  height: number | null
+  duration_seconds: number | null
+}
+
+export interface SharedMapResponse {
+  id: number
+  name: string
+  description: string | null
+  color_theme: ColorTheme | null
+  media: SharedMediaFile[]
+  notes: MapNote[]
 }
 
 export interface PaginatedResponse<T> {

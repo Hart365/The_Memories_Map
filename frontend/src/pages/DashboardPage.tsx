@@ -4,17 +4,18 @@ import { useState } from 'react'
 import {
   Container, Title, Text, Button, TextInput, Textarea, Paper, Group,
   Stack, Badge, ActionIcon, Modal, SimpleGrid, Box, ThemeIcon, Loader,
-  Alert, Tooltip, useComputedColorScheme,
+  Alert, Tooltip, useComputedColorScheme, Divider, Menu,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
 import {
   IconMapPin, IconPlus, IconTrash, IconPhoto, IconMap, IconTimeline,
-  IconAlertCircle, IconMapOff,
+  IconAlertCircle, IconMapOff, IconShare2, IconCopy, IconRefresh, IconMailForward,
+  IconDotsVertical,
 } from '@tabler/icons-react'
 import api from '@/lib/api'
-import type { MemoriesMap } from '@/types'
+import type { MapGuest, MemoriesMap } from '@/types'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 
@@ -24,6 +25,11 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const isDark = useComputedColorScheme('light') === 'dark'
   const [mapPendingDelete, setMapPendingDelete] = useState<MemoriesMap | null>(null)
+  const [mapPendingShare, setMapPendingShare] = useState<MemoriesMap | null>(null)
+  const [guestPendingRevoke, setGuestPendingRevoke] = useState<MapGuest | null>(null)
+  const [shareEmail, setShareEmail] = useState('')
+  const [latestShareUrl, setLatestShareUrl] = useState('')
+  const [busyGuestActionId, setBusyGuestActionId] = useState<number | null>(null)
 
   const form = useForm({
     initialValues: { name: '', description: '' },
@@ -54,8 +60,91 @@ export default function DashboardPage() {
     onError: () => notifications.show({ message: 'Failed to delete map.', color: 'red' }),
   })
 
+  const shareMap = useMutation({
+    mutationFn: (payload: { id: number; email: string }) => api.post(`/maps/${payload.id}/guests`, { email: payload.email }),
+    onSuccess: (response) => {
+      setLatestShareUrl(response.data.share_url ?? '')
+      qc.invalidateQueries({ queryKey: ['map-guests', mapPendingShare?.id] })
+      const mailFailed = Boolean(response?.data?.mail_failed)
+      notifications.show({
+        message: mailFailed
+          ? 'Share link created. Email could not be sent, so copy the link manually.'
+          : 'Secure share link created and invite sent.',
+        color: mailFailed ? 'orange' : 'teal',
+      })
+    },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? 'Failed to create share link.'
+      notifications.show({ message, color: 'red' })
+    },
+  })
+
+  const { data: guests = [] } = useQuery<MapGuest[]>({
+    queryKey: ['map-guests', mapPendingShare?.id],
+    enabled: Boolean(mapPendingShare),
+    queryFn: () => api.get(`/maps/${mapPendingShare?.id}/guests`).then((r) => r.data),
+  })
+
+  const rotateGuestLink = async (guest: MapGuest) => {
+    if (!mapPendingShare) return
+    setBusyGuestActionId(guest.id)
+    try {
+      const response = await api.post(`/maps/${mapPendingShare.id}/guests/${guest.id}/rotate-link`)
+      setLatestShareUrl(response.data.share_url ?? '')
+      notifications.show({ message: 'Share link rotated.', color: 'teal' })
+      qc.invalidateQueries({ queryKey: ['map-guests', mapPendingShare.id] })
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? 'Failed to rotate share link.'
+      notifications.show({ message, color: 'red' })
+    } finally {
+      setBusyGuestActionId(null)
+    }
+  }
+
+  const resendGuestInvite = async (guest: MapGuest) => {
+    if (!mapPendingShare) return
+    setBusyGuestActionId(guest.id)
+    try {
+      const response = await api.post(`/maps/${mapPendingShare.id}/guests/${guest.id}/resend-invite`)
+      setLatestShareUrl(response.data.share_url ?? '')
+      notifications.show({ message: 'Invite resent with a new secure link.', color: 'teal' })
+      qc.invalidateQueries({ queryKey: ['map-guests', mapPendingShare.id] })
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? 'Failed to resend invite.'
+      notifications.show({ message, color: 'red' })
+    } finally {
+      setBusyGuestActionId(null)
+    }
+  }
+
+  const revokeGuestAccess = async () => {
+    if (!mapPendingShare || !guestPendingRevoke) return
+    setBusyGuestActionId(guestPendingRevoke.id)
+    try {
+      await api.delete(`/maps/${mapPendingShare.id}/guests/${guestPendingRevoke.id}`)
+      notifications.show({ message: 'Guest access revoked.', color: 'orange' })
+      qc.invalidateQueries({ queryKey: ['map-guests', mapPendingShare.id] })
+      setGuestPendingRevoke(null)
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? 'Failed to revoke guest access.'
+      notifications.show({ message, color: 'red' })
+    } finally {
+      setBusyGuestActionId(null)
+    }
+  }
+
   const handleDelete = (map: MemoriesMap) => {
     setMapPendingDelete(map)
+  }
+
+  const handleShare = (map: MemoriesMap) => {
+    setMapPendingShare(map)
+    setShareEmail('')
+    setLatestShareUrl('')
   }
 
   const surface = isDark ? '#1a2028' : '#ffffff'
@@ -64,7 +153,7 @@ export default function DashboardPage() {
 
   return (
     <Container size="xl" py="lg">
-      <Group justify="space-between" mb="xl">
+      <Group justify="space-between" mb="xl" wrap="wrap" gap="sm">
         <Box>
           <Title order={1} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>My Memories Maps</Title>
           <Text c="dimmed" mt={4}>{maps ? `${maps.length} map${maps.length !== 1 ? 's' : ''}` : ''}</Text>
@@ -113,7 +202,7 @@ export default function DashboardPage() {
                 {map.media_files_count ?? 0} media
               </Badge>
               <Group gap="xs" mt="auto" justify="space-between">
-                <Group gap="xs">
+                <Group gap="xs" visibleFrom="lg">
                   <Tooltip label="Map" withArrow>
                     <ActionIcon variant="default" styles={getMapSectionActionIconStyles('map')} radius="md" size="lg"
                       onClick={() => navigate(`/maps/${map.id}/map`)} aria-label={`Map: ${map.name}`}>
@@ -132,8 +221,47 @@ export default function DashboardPage() {
                       <IconTimeline size={18} aria-hidden />
                     </ActionIcon>
                   </Tooltip>
+                  <Tooltip label="Share read-only link" withArrow>
+                    <ActionIcon variant="default" styles={getMapSectionActionIconStyles('consolidated')} radius="md" size="lg"
+                      onClick={() => handleShare(map)} aria-label={`Share: ${map.name}`}>
+                      <IconShare2 size={18} aria-hidden />
+                    </ActionIcon>
+                  </Tooltip>
                 </Group>
-                <Tooltip label="Delete" withArrow>
+                <Box hiddenFrom="lg">
+                  <Menu shadow="md" width={220}>
+                    <Menu.Target>
+                      <ActionIcon
+                        variant="default"
+                        styles={getMapSectionActionIconStyles('consolidated')}
+                        radius="md"
+                        size="lg"
+                        aria-label={`Open actions for ${map.name}`}
+                      >
+                        <IconDotsVertical size={18} aria-hidden />
+                      </ActionIcon>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item leftSection={<IconMap size={16} aria-hidden />} onClick={() => navigate(`/maps/${map.id}/map`)}>
+                        Map
+                      </Menu.Item>
+                      <Menu.Item leftSection={<IconPhoto size={16} aria-hidden />} onClick={() => navigate(`/maps/${map.id}/gallery`)}>
+                        Gallery
+                      </Menu.Item>
+                      <Menu.Item leftSection={<IconTimeline size={16} aria-hidden />} onClick={() => navigate(`/maps/${map.id}/timeline`)}>
+                        Timeline
+                      </Menu.Item>
+                      <Menu.Item leftSection={<IconShare2 size={16} aria-hidden />} onClick={() => handleShare(map)}>
+                        Share
+                      </Menu.Item>
+                      <Menu.Divider />
+                      <Menu.Item color="red" leftSection={<IconTrash size={16} aria-hidden />} onClick={() => handleDelete(map)}>
+                        Delete
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                </Box>
+                <Tooltip label="Delete" withArrow visibleFrom="lg">
                   <ActionIcon variant="default" styles={getMapSectionActionIconStyles('danger')} radius="md" size="lg"
                     onClick={() => handleDelete(map)} aria-label={`Delete: ${map.name}`}>
                     <IconTrash size={18} aria-hidden />
@@ -161,6 +289,140 @@ export default function DashboardPage() {
           </Stack>
         </form>
       </Modal>
+
+      <Modal
+        opened={mapPendingShare !== null}
+        onClose={() => setMapPendingShare(null)}
+        title={<Group gap="xs"><IconShare2 size={18} color={brand} aria-hidden /><Text fw={700} size="lg">Share Map</Text></Group>}
+        radius="lg"
+        centered
+        size="lg"
+      >
+        <Stack gap="md">
+          <Text style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+            Create a secure, read-only link for <strong>{mapPendingShare?.name}</strong>. The guest must have both the link and the invited email address to open the map.
+          </Text>
+          <Group align="flex-end" wrap="wrap">
+            <TextInput
+              label="Invite email address"
+              placeholder="name@example.com"
+              type="email"
+              value={shareEmail}
+              onChange={(e) => setShareEmail(e.currentTarget.value)}
+              style={{ flex: 1, minWidth: 220 }}
+              autoComplete="email"
+              required
+            />
+            <Button
+              variant="default"
+              styles={getMapSectionButtonStyles('upload', 'solid')}
+              leftSection={<IconShare2 size={16} aria-hidden />}
+              loading={shareMap.isPending}
+              disabled={!mapPendingShare || shareEmail.trim().length === 0}
+              onClick={() => mapPendingShare && shareMap.mutate({ id: mapPendingShare.id, email: shareEmail.trim() })}
+            >
+              Create share link
+            </Button>
+          </Group>
+
+          {latestShareUrl && (
+            <Paper p="md" radius="md" style={{ backgroundColor: surface, border }}>
+              <Stack gap="xs">
+                <Text fw={700} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>Latest secure link</Text>
+                <Group wrap="wrap" align="flex-end">
+                  <TextInput value={latestShareUrl} readOnly aria-label="Latest share link" style={{ flex: 1, minWidth: 220 }} />
+                  <Button
+                    variant="default"
+                    styles={getMapSectionButtonStyles('consolidated')}
+                    leftSection={<IconCopy size={16} aria-hidden />}
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(latestShareUrl)
+                      notifications.show({ message: 'Share link copied.', color: 'teal' })
+                    }}
+                  >
+                    Copy link
+                  </Button>
+                </Group>
+              </Stack>
+            </Paper>
+          )}
+
+          <Divider label="Current invited guests" labelPosition="center" />
+
+          {guests.length === 0 ? (
+            <Text c="dimmed">No active share invitations for this map yet.</Text>
+          ) : (
+            <Stack gap="xs">
+              {guests.map((guest) => (
+                <Paper key={guest.id} p="sm" radius="md" style={{ backgroundColor: surface, border }}>
+                  <Group justify="space-between" wrap="wrap" gap="xs">
+                    <Box>
+                      <Text fw={700} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>{guest.email}</Text>
+                      <Text size="xs" c="dimmed">
+                        Invited {new Date(guest.invited_at).toLocaleString()}
+                        {guest.last_accessed_at ? ` • Opened ${new Date(guest.last_accessed_at).toLocaleString()}` : ' • Not opened yet'}
+                      </Text>
+                    </Box>
+                    <Group gap="xs" wrap="wrap">
+                      {guest.expires_at && (
+                        <Badge variant="light" color="teal">
+                          Expires {new Date(guest.expires_at).toLocaleDateString()}
+                        </Badge>
+                      )}
+                      <Tooltip label="Rotate secure link" withArrow>
+                        <ActionIcon
+                          variant="default"
+                          styles={getMapSectionActionIconStyles('map')}
+                          aria-label={`Rotate link for ${guest.email}`}
+                          loading={busyGuestActionId === guest.id}
+                          onClick={() => rotateGuestLink(guest)}
+                        >
+                          <IconRefresh size={16} aria-hidden />
+                        </ActionIcon>
+                      </Tooltip>
+                      <Tooltip label="Resend invite email" withArrow>
+                        <ActionIcon
+                          variant="default"
+                          styles={getMapSectionActionIconStyles('upload')}
+                          aria-label={`Resend invite to ${guest.email}`}
+                          loading={busyGuestActionId === guest.id}
+                          onClick={() => resendGuestInvite(guest)}
+                        >
+                          <IconMailForward size={16} aria-hidden />
+                        </ActionIcon>
+                      </Tooltip>
+                      <Tooltip label="Revoke access" withArrow>
+                        <ActionIcon
+                          variant="default"
+                          styles={getMapSectionActionIconStyles('danger')}
+                          aria-label={`Revoke access for ${guest.email}`}
+                          loading={busyGuestActionId === guest.id}
+                          onClick={() => setGuestPendingRevoke(guest)}
+                        >
+                          <IconTrash size={16} aria-hidden />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
+                  </Group>
+                </Paper>
+              ))}
+            </Stack>
+          )}
+        </Stack>
+      </Modal>
+
+      <NativeConfirmDialog
+        opened={guestPendingRevoke !== null}
+        title="Revoke shared access?"
+        message={guestPendingRevoke
+          ? `Remove read-only access for ${guestPendingRevoke.email}? The current link will stop working immediately.`
+          : 'Revoke this guest access?'}
+        confirmLabel="Revoke"
+        tone="danger"
+        loading={guestPendingRevoke !== null && busyGuestActionId === guestPendingRevoke.id}
+        onCancel={() => setGuestPendingRevoke(null)}
+        onConfirm={revokeGuestAccess}
+      />
 
       <NativeConfirmDialog
         opened={mapPendingDelete !== null}

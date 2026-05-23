@@ -450,7 +450,25 @@ class MediaController extends Controller
     public function indexShared(MemoriesMap $map): JsonResponse
     {
         $media = $map->mediaFiles()
-            ->select('id', 'map_id', 'latitude', 'longitude', 'captured_at', 'thumbnail_name', 'user_caption', 'mime_type')
+            ->select(
+                'id',
+                'map_id',
+                'original_name',
+                'mime_type',
+                'size_bytes',
+                'latitude',
+                'longitude',
+                'location_name',
+                'location_city',
+                'captured_at',
+                'captured_at_local',
+                'timezone',
+                'user_caption',
+                'thumbnail_name',
+                'width',
+                'height',
+                'duration_seconds'
+            )
             ->orderBy('captured_at')
             ->get();
 

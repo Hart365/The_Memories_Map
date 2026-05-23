@@ -97,4 +97,33 @@ class AuthController extends Controller
             'expires_at'   => $guest->expires_at,
         ]);
     }
+
+    /**
+     * Resolve a shared-map invitation using the secret link token plus the invited email.
+     */
+    public function guestAccess(Request $request, string $token): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $guest = MapGuest::findByAccessToken($token);
+
+        if (! $guest || ! hash_equals(strtolower($guest->email), strtolower($validated['email']))) {
+            return response()->json(['message' => 'Invalid invitation link or email address.'], 401);
+        }
+
+        if ($guest->isExpired()) {
+            return response()->json(['message' => 'This shared link has expired.'], 403);
+        }
+
+        $guest->update(['last_accessed_at' => now()]);
+
+        return response()->json([
+            'access_token' => $token,
+            'map_id' => $guest->map_id,
+            'expires_at' => $guest->expires_at,
+            'email' => $guest->email,
+        ]);
+    }
 }

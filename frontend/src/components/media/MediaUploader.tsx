@@ -28,6 +28,7 @@ const ACCEPTED = '.jpg,.jpeg,.png,.gif,.webp,.heic,.mp4,.mov,.avi,.mkv,.m4v'
 export default function MediaUploader({ mapId, onUploadComplete }: Props) {
   const isDark = useComputedColorScheme('light') === 'dark'
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputId = 'media-uploader-input'
   const [files, setFiles] = useState<FileItem[]>([])
   const [uploading, setUploading] = useState(false)
   const [filePendingRemoval, setFilePendingRemoval] = useState<number | null>(null)
@@ -111,6 +112,8 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
   return (
     <Stack gap="md">
       <Box
+        component="label"
+        htmlFor={fileInputId}
         style={{
           border: '2px dashed ' + (isDark ? 'rgba(34,211,224,0.4)' : 'rgba(0,95,99,0.3)'),
           borderRadius: 12,
@@ -119,11 +122,6 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
           cursor: 'pointer',
           backgroundColor: isDark ? 'rgba(34,211,224,0.04)' : 'rgba(0,95,99,0.03)',
         }}
-        onClick={() => fileInputRef.current?.click()}
-        onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
-        tabIndex={0}
-        role="button"
-        aria-label="Click to select media files for upload"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files) }}
       >
@@ -133,13 +131,18 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
         </Text>
         <Text size="xs" c="dimmed" mt={4}>JPG, PNG, GIF, WEBP, HEIC, MP4, MOV, AVI, MKV</Text>
         <input
+          id={fileInputId}
           ref={fileInputRef}
           type="file"
           multiple
           accept={ACCEPTED}
           style={{ display: 'none' }}
           aria-hidden="true"
-          onChange={(e) => addFiles(e.target.files)}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            addFiles(e.target.files)
+            e.currentTarget.value = ''
+          }}
         />
       </Box>
 

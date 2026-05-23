@@ -7,12 +7,14 @@ import { format, getDate, getHours, getMonth, getYear, parseISO } from 'date-fns
 import 'leaflet/dist/leaflet.css'
 import {
   Container, Title, Text, Button, Paper, Group, Box, Stack,
-  SimpleGrid, Loader, Modal, useComputedColorScheme, Badge, Slider, Checkbox, Select,
+  SimpleGrid, Loader, Modal, useComputedColorScheme, Badge, Slider, Checkbox, Select, Menu, ActionIcon,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   IconPhoto, IconTimeline, IconUpload, IconLayoutDashboard, IconMapPin, IconMap, IconClock,
   IconArrowLeft, IconEdit, IconTrash, IconSelectAll,
+  IconDotsVertical,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import api from '@/lib/api'
@@ -22,7 +24,7 @@ import MapLayers from '@/components/map/MapLayers'
 import MediaUploader from '@/components/media/MediaUploader'
 import BulkEditModal from '@/components/media/BulkEditModal'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
-import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { buildTimelineColorMap } from '@/lib/timelineColors'
 import { YEAR_BAR_COLORS } from '@/styles/mantine-theme'
 
@@ -117,6 +119,7 @@ export default function MapViewPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const isDark = useComputedColorScheme('light') === 'dark'
+  const isTabletOrSmaller = useMediaQuery('(max-width: 75em)')
   const [uploaderOpen, { open: openUploader, close: closeUploader }] = useDisclosure(false)
   const [bulkEditOpen, { open: openBulkEdit, close: closeBulkEdit }] = useDisclosure(false)
   const [timelineLevel, setTimelineLevel] = useState<DrillLevel>('year')
@@ -351,6 +354,7 @@ export default function MapViewPage() {
   const galleryCols = thumbSize <= 88 ? 6 : thumbSize <= 108 ? 5 : thumbSize <= 132 ? 4 : 3
   const defaultGalleryPerPage = galleryCols * 4
   const galleryPerPage = mediaPerPage ? Number(mediaPerPage) : defaultGalleryPerPage
+  const effectiveThumbHeight = Math.max(thumbSize, 96)
   const galleryPageCount = Math.max(1, Math.ceil(recentMedia.length / galleryPerPage))
   const pagedGallery = recentMedia.slice((galleryPage - 1) * galleryPerPage, galleryPage * galleryPerPage)
 
@@ -467,7 +471,7 @@ export default function MapViewPage() {
             {allMedia.length} media · {geoMedia.length} with location
           </Text>
         </Box>
-        <Group gap="xs">
+        <Group gap="xs" visibleFrom="lg">
           <Button variant="default" size="sm" styles={getMapSectionButtonStyles('consolidated', 'solid')}
             leftSection={<IconMap size={16} aria-hidden />} aria-current="page">
             Consolidated
@@ -492,6 +496,29 @@ export default function MapViewPage() {
             Upload
           </Button>
         </Group>
+        <Box hiddenFrom="lg">
+          <Menu shadow="md" width={220}>
+            <Menu.Target>
+              <ActionIcon
+                variant="default"
+                styles={getMapSectionActionIconStyles('consolidated')}
+                size="lg"
+                radius="md"
+                aria-label="Open consolidated actions"
+              >
+                <IconDotsVertical size={18} aria-hidden />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item leftSection={<IconMap size={16} aria-hidden />} disabled>Consolidated</Menu.Item>
+              <Menu.Item leftSection={<IconTimeline size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/timeline`)}>Timeline</Menu.Item>
+              <Menu.Item leftSection={<IconMap size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/map`)}>Map</Menu.Item>
+              <Menu.Item leftSection={<IconPhoto size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/gallery`)}>Gallery</Menu.Item>
+              <Menu.Divider />
+              <Menu.Item leftSection={<IconUpload size={16} aria-hidden />} onClick={openUploader}>Upload</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Box>
       </Group>
 
       {isLoading && <Box ta="center" py="xl"><Loader color="teal" size="lg" aria-label="Loading map" /></Box>}
@@ -504,7 +531,7 @@ export default function MapViewPage() {
             gridTemplateColumns: 'repeat(12, minmax(0, 1fr))',
           }}
         >
-          <Paper p="md" radius="md" style={{ backgroundColor: surface, border, gridColumn: 'span 2' }}>
+          <Paper p="md" radius="md" style={{ backgroundColor: surface, border, gridColumn: isTabletOrSmaller ? 'span 6' : 'span 2' }}>
             <Group gap="xs">
               <IconPhoto size={20} color={brand} aria-hidden />
               <Box>
@@ -516,7 +543,7 @@ export default function MapViewPage() {
             </Group>
           </Paper>
 
-          <Paper p="md" radius="md" style={{ backgroundColor: surface, border, gridColumn: 'span 2' }}>
+          <Paper p="md" radius="md" style={{ backgroundColor: surface, border, gridColumn: isTabletOrSmaller ? 'span 6' : 'span 2' }}>
             <Group gap="xs">
               <IconMapPin size={20} color={brand} aria-hidden />
               <Box>
@@ -528,7 +555,7 @@ export default function MapViewPage() {
             </Group>
           </Paper>
 
-          <Paper radius="lg" style={{ backgroundColor: surface, border, overflow: 'hidden', gridColumn: 'span 8', gridRow: 'span 2' }}>
+          <Paper radius="lg" style={{ backgroundColor: surface, border, overflow: 'hidden', gridColumn: isTabletOrSmaller ? 'span 12' : 'span 8', gridRow: isTabletOrSmaller ? 'span 1' : 'span 2' }}>
             <Box style={{ height: 500 }}>
               <MapContainer
                 center={[20, 0]}
@@ -566,7 +593,7 @@ export default function MapViewPage() {
             </Box>
           </Paper>
 
-          <Paper p="md" radius="md" style={{ backgroundColor: surface, border, gridColumn: 'span 4', gridRow: 'span 2' }}>
+          <Paper p="md" radius="md" style={{ backgroundColor: surface, border, gridColumn: isTabletOrSmaller ? 'span 12' : 'span 4', gridRow: isTabletOrSmaller ? 'span 1' : 'span 2' }}>
             <Text fw={800} size="xl" mb="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
               Memories Timeline
             </Text>
@@ -664,7 +691,7 @@ export default function MapViewPage() {
             )}
           </Paper>
 
-          <Paper p="md" radius="md" style={{ backgroundColor: surface, border, gridColumn: 'span 8' }}>
+          <Paper p="md" radius="md" style={{ backgroundColor: surface, border, gridColumn: isTabletOrSmaller ? 'span 12' : 'span 8' }}>
             <Group justify="space-between" mb="sm" wrap="wrap">
               <Text fw={700} size="sm" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
                 Gallery
@@ -677,7 +704,7 @@ export default function MapViewPage() {
 
             <Paper p="sm" radius="md" mb="sm" style={{ backgroundColor: isDark ? '#111827' : '#f8fafc', border }}>
               <Group justify="space-between" gap="sm" wrap="wrap" align="center">
-                <Group gap="xs" style={{ minWidth: 240, flex: 1 }}>
+                <Group gap="xs" style={{ flex: '1 1 240px', minWidth: 0 }}>
                   <Text size="xs" fw={700}>Thumbnail size</Text>
                   <Slider
                     min={72}
@@ -701,12 +728,12 @@ export default function MapViewPage() {
                     { value: '32', label: '32 per page' },
                     { value: '48', label: '48 per page' },
                   ]}
-                  style={{ width: 170 }}
+                  style={{ flex: '1 1 170px', minWidth: 140 }}
                   aria-label="Media items per page in consolidated view"
                   placeholder={`Auto (${defaultGalleryPerPage})`}
                   clearable
                 />
-                <Group gap="xs">
+                <Group gap="xs" wrap="wrap">
                   <Button size="xs" variant="subtle" leftSection={<IconSelectAll size={14} aria-hidden />} onClick={() => setSelectedIds(new Set(pagedGallery.map((m) => m.id)))}>
                     Select visible
                   </Button>
@@ -773,10 +800,10 @@ export default function MapViewPage() {
                         <img
                           src={mediaThumbUrl(mapId!, m.id)}
                           alt={m.user_caption ?? m.original_name}
-                          style={{ width: '100%', height: thumbSize, objectFit: 'cover', borderRadius: 8, display: 'block' }}
+                          style={{ width: '100%', height: effectiveThumbHeight, objectFit: 'cover', borderRadius: 8, display: 'block' }}
                         />
                       ) : (
-                        <Box style={{ width: '100%', height: thumbSize, borderRadius: 8, backgroundColor: isDark ? '#2a3340' : '#e5edf3', display: 'grid', placeItems: 'center' }}>
+                        <Box style={{ width: '100%', height: effectiveThumbHeight, borderRadius: 8, backgroundColor: isDark ? '#2a3340' : '#e5edf3', display: 'grid', placeItems: 'center' }}>
                           <IconPhoto size={22} color={brand} aria-hidden />
                         </Box>
                       )}
@@ -811,7 +838,8 @@ export default function MapViewPage() {
       {/* Upload modal */}
       <Modal opened={uploaderOpen}
         onClose={() => { closeUploader(); qc.invalidateQueries({ queryKey: ['media', mapId] }) }}
-        title={<Text fw={700}>Upload Media</Text>} size="lg" radius="lg" centered>
+        title={<Text fw={700}>Upload Media</Text>} size="lg" radius="lg" centered
+        closeOnEscape={false} closeOnClickOutside={false} keepMounted>
         <MediaUploader mapId={mapId!}
           onUploadComplete={() => { closeUploader(); qc.invalidateQueries({ queryKey: ['media', mapId] }) }} />
       </Modal>

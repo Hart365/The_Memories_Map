@@ -85,7 +85,11 @@ class MapController extends Controller
     /** Shared (guest) view – stripped of private details */
     public function showShared(Request $request, MemoriesMap $map): JsonResponse
     {
-        $map->load(['colorTheme', 'mediaFiles:id,map_id,latitude,longitude,captured_at,thumbnail_name,user_caption', 'notes']);
+        $map->load([
+            'colorTheme',
+            'mediaFiles:id,map_id,original_name,mime_type,size_bytes,latitude,longitude,location_name,location_city,captured_at,captured_at_local,timezone,user_caption,thumbnail_name,width,height,duration_seconds',
+            'notes',
+        ]);
 
         return response()->json([
             'id'          => $map->id,

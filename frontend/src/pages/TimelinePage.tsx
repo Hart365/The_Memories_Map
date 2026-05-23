@@ -5,10 +5,12 @@ import { format, parseISO, getYear, getMonth, getDate, getHours } from 'date-fns
 import {
   Container, Title, Text, Group, Stack, Box, Paper, Badge, Button,
   Loader, useComputedColorScheme, SimpleGrid, Modal, Slider, Checkbox,
+  Menu, ActionIcon,
 } from '@mantine/core'
 import {
   IconArrowLeft, IconMap, IconPhoto,
   IconClock, IconChevronRight, IconUpload, IconEdit, IconTrash, IconSelectAll,
+  IconDotsVertical,
 } from '@tabler/icons-react'
 import { useDisclosure } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
@@ -19,7 +21,7 @@ import { YEAR_BAR_COLORS } from '@/styles/mantine-theme'
 import MediaUploader from '@/components/media/MediaUploader'
 import BulkEditModal from '@/components/media/BulkEditModal'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
-import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { buildTimelineColorMap } from '@/lib/timelineColors'
 
 type DrillLevel = 'year' | 'month' | 'day' | 'hour'
@@ -141,6 +143,7 @@ export default function TimelinePage() {
   const surface = isDark ? '#1a2028' : '#ffffff'
   const border = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)'
   const brand = isDark ? '#22d3e0' : '#005f63'
+  const effectiveThumbHeight = Math.max(thumbSize, 96)
   const hourGridCols = thumbSize <= 88 ? 6 : thumbSize <= 108 ? 5 : thumbSize <= 132 ? 4 : 3
 
   const maxYearCount = Math.max(1, ...yearBuckets.map(([,m]) => m.length))
@@ -292,7 +295,7 @@ export default function TimelinePage() {
             {map?.name} • {mediaWithDates.length} items with dates
           </Text>
         </Box>
-        <Group gap="xs">
+        <Group gap="xs" visibleFrom="lg">
           <Button variant="default" size="sm" styles={getMapSectionButtonStyles('consolidated')} leftSection={<IconMap size={16} aria-hidden />}
             onClick={() => navigate(`/maps/${mapId}/consolidated`)}>Consolidated</Button>
           <Button variant="default" size="sm" styles={getMapSectionButtonStyles('timeline', 'solid')} leftSection={<IconClock size={16} aria-hidden />}
@@ -304,6 +307,29 @@ export default function TimelinePage() {
           <Button variant="default" size="sm" styles={getMapSectionButtonStyles('upload', 'solid')} leftSection={<IconUpload size={16} aria-hidden />}
             onClick={openUploader}>Upload</Button>
         </Group>
+        <Box hiddenFrom="lg">
+          <Menu shadow="md" width={220}>
+            <Menu.Target>
+              <ActionIcon
+                variant="default"
+                styles={getMapSectionActionIconStyles('consolidated')}
+                size="lg"
+                radius="md"
+                aria-label="Open timeline actions"
+              >
+                <IconDotsVertical size={18} aria-hidden />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item leftSection={<IconMap size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/consolidated`)}>Consolidated</Menu.Item>
+              <Menu.Item leftSection={<IconClock size={16} aria-hidden />} disabled>Timeline</Menu.Item>
+              <Menu.Item leftSection={<IconMap size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/map`)}>Map</Menu.Item>
+              <Menu.Item leftSection={<IconPhoto size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/gallery`)}>Gallery</Menu.Item>
+              <Menu.Divider />
+              <Menu.Item leftSection={<IconUpload size={16} aria-hidden />} onClick={openUploader}>Upload</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Box>
       </Group>
 
       {isLoading && (
@@ -531,7 +557,7 @@ export default function TimelinePage() {
               </Text>
               <Paper p="sm" radius="md" mb="md" style={{ backgroundColor: surface, border }}>
                 <Group justify="space-between" gap="sm" wrap="wrap" align="center">
-                  <Group gap="xs" style={{ minWidth: 220, flex: 1 }}>
+                  <Group gap="xs" style={{ flex: '1 1 220px', minWidth: 0 }}>
                     <Text size="xs" fw={700}>Thumbnail size</Text>
                     <Slider
                       min={72}
@@ -544,7 +570,7 @@ export default function TimelinePage() {
                       aria-label="Timeline thumbnail size"
                     />
                   </Group>
-                  <Group gap="xs">
+                  <Group gap="xs" wrap="wrap">
                     <Button size="xs" variant="subtle" leftSection={<IconSelectAll size={14} aria-hidden />} onClick={selectAllVisible}>
                       Select all visible
                     </Button>
@@ -603,9 +629,9 @@ export default function TimelinePage() {
                           {m.thumbnail_name ? (
                             <img src={mediaThumbUrl(mapId!, m.id)}
                               alt={m.original_name}
-                              style={{ width: '100%', height: thumbSize, objectFit: 'cover', display: 'block' }} />
+                              style={{ width: '100%', height: effectiveThumbHeight, objectFit: 'cover', display: 'block' }} />
                           ) : (
-                            <Box style={{ width: '100%', height: thumbSize, backgroundColor: isDark ? '#2a3340' : '#f0f4f8',
+                            <Box style={{ width: '100%', height: effectiveThumbHeight, backgroundColor: isDark ? '#2a3340' : '#f0f4f8',
                               display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <IconPhoto size={32} color={brand} aria-hidden />
                             </Box>
@@ -645,6 +671,9 @@ export default function TimelinePage() {
         size="lg"
         radius="lg"
         centered
+        closeOnEscape={false}
+        closeOnClickOutside={false}
+        keepMounted
       >
         <MediaUploader
           mapId={mapId!}

@@ -18,6 +18,7 @@ import {
   ScrollArea,
   Divider,
   Badge,
+  Box,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -85,7 +86,7 @@ export default function Layout() {
         header={{ height: 60 }}
         navbar={{
           width: 240,
-          breakpoint: 'sm',
+          breakpoint: 'lg',
           collapsed: { mobile: !navOpen },
         }}
         padding="md"
@@ -100,17 +101,9 @@ export default function Layout() {
             boxShadow: 'var(--shadow-sm)',
           }}
         >
-          <Group h="100%" px="md" justify="space-between">
+          <Group h="100%" px="md" justify="space-between" wrap="nowrap">
             {/* Brand */}
             <Group gap="sm">
-              <Burger
-                opened={navOpen}
-                onClick={toggleNav}
-                hiddenFrom="sm"
-                size="sm"
-                aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
-                color={brandColor}
-              />
               <Link
                 to="/dashboard"
                 style={{
@@ -135,7 +128,13 @@ export default function Layout() {
             </Group>
 
             {/* Global search */}
-            <form onSubmit={handleSearchSubmit} role="search" style={{ flex: 1, maxWidth: 420, margin: '0 16px' }}>
+            <Box
+              component="form"
+              onSubmit={handleSearchSubmit}
+              role="search"
+              visibleFrom="sm"
+              style={{ flex: 1, maxWidth: 420, margin: '0 16px' }}
+            >
               <TextInput
                 placeholder="Search media… (in current map)"
                 leftSection={<IconSearch size={16} aria-hidden />}
@@ -160,10 +159,19 @@ export default function Layout() {
                 radius="md"
                 style={{ width: '100%' }}
               />
-            </form>
+            </Box>
 
             {/* Right actions */}
             <Group gap="xs">
+              <Burger
+                opened={navOpen}
+                onClick={toggleNav}
+                hiddenFrom="lg"
+                size="sm"
+                aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+                color={brandColor}
+              />
+
               {/* Dark mode toggle */}
               <Tooltip label={isDark ? 'Switch to light mode' : 'Switch to dark mode'} withArrow>
                 <ActionIcon
@@ -237,6 +245,34 @@ export default function Layout() {
             borderRight: isDark ? '1px solid rgba(34,211,224,0.14)' : '1px solid rgba(0,0,0,0.06)',
           }}
         >
+          {currentMapId && (
+            <AppShell.Section hiddenFrom="sm" mb="xs">
+              <Box component="form" onSubmit={handleSearchSubmit} role="search">
+                <TextInput
+                  placeholder="Search this map"
+                  leftSection={<IconSearch size={16} aria-hidden />}
+                  rightSection={
+                    searchQuery ? (
+                      <ActionIcon
+                        variant="subtle"
+                        size="sm"
+                        onClick={() => setSearchQuery('')}
+                        aria-label="Clear search"
+                      >
+                        <IconX size={14} aria-hidden />
+                      </ActionIcon>
+                    ) : undefined
+                  }
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.currentTarget.value)}
+                  aria-label="Search media in current map"
+                  size="sm"
+                  radius="md"
+                />
+              </Box>
+            </AppShell.Section>
+          )}
+
           <AppShell.Section grow component={ScrollArea}>
             <Stack gap="xs" mt="xs">
               {/* Main nav */}

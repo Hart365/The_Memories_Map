@@ -24,7 +24,7 @@ export default function App() {
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/shared/:mapId" element={<GuestAccessPage />} />
+        <Route path="/shared/:token" element={<GuestAccessPage />} />
 
         {/* Protected */}
         <Route

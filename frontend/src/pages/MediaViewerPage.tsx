@@ -15,6 +15,8 @@ import {
   Title,
   useComputedColorScheme,
   Modal,
+  Menu,
+  ActionIcon,
 } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
 import {
@@ -26,6 +28,7 @@ import {
   IconTimeline,
   IconTrash,
   IconUpload,
+  IconDotsVertical,
 } from '@tabler/icons-react'
 import api from '@/lib/api'
 import { mediaFileUrl } from '@/lib/mediaUrl'
@@ -34,7 +37,7 @@ import NoteEditor from '@/components/notes/NoteEditor'
 import LocationEditor from '@/components/media/LocationEditor'
 import MediaUploader from '@/components/media/MediaUploader'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
-import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 
 export default function MediaViewerPage() {
   const { mapId, mediaId } = useParams<{ mapId: string; mediaId: string }>()
@@ -104,7 +107,7 @@ export default function MediaViewerPage() {
           <Link to={`/maps/${mapId}`}>Consolidated</Link>
           <Text>{media.user_caption ?? media.original_name}</Text>
         </Breadcrumbs>
-        <Group gap="xs">
+        <Group gap="xs" visibleFrom="lg">
           <Button variant="default" size="xs" styles={getMapSectionButtonStyles('consolidated')} leftSection={<IconMap size={14} aria-hidden />} onClick={() => navigate(`/maps/${mapId}`)}>
             Consolidated
           </Button>
@@ -121,6 +124,29 @@ export default function MediaViewerPage() {
             Upload
           </Button>
         </Group>
+        <Container hiddenFrom="lg" size="content" p={0} m={0}>
+          <Menu shadow="md" width={220}>
+            <Menu.Target>
+              <ActionIcon
+                variant="default"
+                styles={getMapSectionActionIconStyles('consolidated')}
+                size="md"
+                radius="md"
+                aria-label="Open media actions"
+              >
+                <IconDotsVertical size={16} aria-hidden />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item leftSection={<IconMap size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}`)}>Consolidated</Menu.Item>
+              <Menu.Item leftSection={<IconTimeline size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/timeline`)}>Timeline</Menu.Item>
+              <Menu.Item leftSection={<IconMap size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/map`)}>Map</Menu.Item>
+              <Menu.Item leftSection={<IconPhoto size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/gallery`)}>Gallery</Menu.Item>
+              <Menu.Divider />
+              <Menu.Item leftSection={<IconUpload size={16} aria-hidden />} onClick={openUploader}>Upload</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Container>
       </Group>
 
       <Title order={1} mb="md" style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
@@ -249,6 +275,9 @@ export default function MediaViewerPage() {
         size="lg"
         radius="lg"
         centered
+        closeOnEscape={false}
+        closeOnClickOutside={false}
+        keepMounted
       >
         <MediaUploader
           mapId={mapId!}

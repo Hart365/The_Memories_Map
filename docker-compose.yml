@@ -13,10 +13,15 @@ services:
       - media_data:/var/memories-map/media
     environment:
       APP_ENV: local
+      APP_URL: http://localhost:8080
+      FRONTEND_URL: http://localhost:5173
       DB_HOST: db
       DB_DATABASE: memories_map
       DB_USERNAME: memories_map_user
       DB_PASSWORD: secret
+      MAIL_MAILER: log
+      MAIL_FROM_ADDRESS: noreply@localhost
+      MAIL_FROM_NAME: Memories Map
     depends_on:
       db:
         condition: service_healthy

@@ -21,12 +21,14 @@ Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login',    [AuthController::class, 'login']);
     Route::post('/guest-login', [AuthController::class, 'guestLogin']);
+    Route::post('/guest-access/{token}', [AuthController::class, 'guestAccess']);
 });
 
 // Legacy auth aliases kept for older frontend bundles that still call /api/* directly.
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/guest-login', [AuthController::class, 'guestLogin']);
+Route::post('/guest-access/{token}', [AuthController::class, 'guestAccess']);
 
 // Token-authenticated media routes for <img>/<video> tags
 Route::get('/maps/{map}/media/{media}/file-token', [MediaController::class, 'serveFileToken']);
@@ -73,6 +75,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/maps/{map}/guests',              [GuestController::class, 'index']);
     Route::post('/maps/{map}/guests',             [GuestController::class, 'store']);
     Route::delete('/maps/{map}/guests/{guest}',   [GuestController::class, 'destroy']);
+    Route::post('/maps/{map}/guests/{guest}/rotate-link', [GuestController::class, 'rotateLink']);
+    Route::post('/maps/{map}/guests/{guest}/resend-invite', [GuestController::class, 'resendInvite']);
     Route::post('/maps/{map}/guests/{guest}/reset-password', [GuestController::class, 'resetPassword']);
 });
 
@@ -80,6 +84,7 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::middleware('guest.access')->prefix('shared')->group(function () {
     Route::get('/maps/{map}',                          [MapController::class, 'showShared']);
     Route::get('/maps/{map}/media',                    [MediaController::class, 'indexShared']);
+    Route::get('/maps/{map}/media/{media}/file',       [MediaController::class, 'serveFile']);
     Route::get('/maps/{map}/media/{media}/thumb',      [MediaController::class, 'serveThumbnail']);
     Route::get('/maps/{map}/notes',                    [NoteController::class, 'indexShared']);
 });

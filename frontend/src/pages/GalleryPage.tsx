@@ -5,7 +5,7 @@ import {
   Container, Title, Text, Button, Paper, Group, Box,
   SimpleGrid, Badge, ActionIcon, Loader, Alert, Checkbox,
   Slider, Tooltip, TextInput, Modal, useComputedColorScheme,
-  Select, Pagination,
+  Select, Pagination, Menu,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -13,6 +13,7 @@ import {
   IconSelectAll, IconX, IconEdit, IconAlertCircle,
   IconVideo, IconLocation, IconSortAscending, IconSortDescending,
   IconUpload, IconGrid3x3, IconLayoutGrid, IconClock, IconTrash,
+  IconDotsVertical,
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 import api from '@/lib/api'
@@ -21,7 +22,7 @@ import type { MemoriesMap, MediaFile } from '@/types'
 import MediaUploader from '@/components/media/MediaUploader'
 import BulkEditModal from '@/components/media/BulkEditModal'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
-import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 
 export default function GalleryPage() {
   const { mapId } = useParams<{ mapId: string }>()
@@ -75,6 +76,7 @@ export default function GalleryPage() {
   }, [allMedia, filterType, searchQuery, sortAsc])
 
   const gridCols = thumbSize <= 88 ? 8 : thumbSize <= 108 ? 6 : thumbSize <= 132 ? 5 : 4
+  const effectiveThumbHeight = Math.max(thumbSize, 96)
   const defaultPageSize = gridCols * 7
   const pageSize = mediaPerPage ? Number(mediaPerPage) : defaultPageSize
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / pageSize))
@@ -133,7 +135,7 @@ export default function GalleryPage() {
             {map?.name} • {filteredSorted.length} of {allMedia.length} items
           </Text>
         </Box>
-        <Group gap="xs">
+        <Group gap="xs" visibleFrom="lg">
           <Button variant="default" size="sm" styles={getMapSectionButtonStyles('consolidated')} leftSection={<IconMap size={16} aria-hidden />}
             onClick={() => navigate(`/maps/${mapId}/consolidated`)}>Consolidated</Button>
           <Button variant="default" size="sm" styles={getMapSectionButtonStyles('timeline')} leftSection={<IconTimeline size={16} aria-hidden />}
@@ -145,6 +147,29 @@ export default function GalleryPage() {
           <Button variant="default" size="sm" styles={getMapSectionButtonStyles('upload', 'solid')} leftSection={<IconUpload size={16} aria-hidden />}
             onClick={openUploader}>Upload</Button>
         </Group>
+        <Box hiddenFrom="lg">
+          <Menu shadow="md" width={220}>
+            <Menu.Target>
+              <ActionIcon
+                variant="default"
+                styles={getMapSectionActionIconStyles('consolidated')}
+                size="lg"
+                radius="md"
+                aria-label="Open gallery actions"
+              >
+                <IconDotsVertical size={18} aria-hidden />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item leftSection={<IconMap size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/consolidated`)}>Consolidated</Menu.Item>
+              <Menu.Item leftSection={<IconTimeline size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/timeline`)}>Timeline</Menu.Item>
+              <Menu.Item leftSection={<IconMap size={16} aria-hidden />} onClick={() => navigate(`/maps/${mapId}/map`)}>Map</Menu.Item>
+              <Menu.Item leftSection={<IconPhoto size={16} aria-hidden />} disabled>Gallery</Menu.Item>
+              <Menu.Divider />
+              <Menu.Item leftSection={<IconUpload size={16} aria-hidden />} onClick={openUploader}>Upload</Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Box>
       </Group>
 
       {/* Toolbar */}
@@ -161,7 +186,7 @@ export default function GalleryPage() {
                 <IconX size={14} aria-hidden />
               </ActionIcon>
             ) : null}
-            style={{ minWidth: 200, flex: 1 }}
+            style={{ flex: '1 1 240px', minWidth: 0 }}
             aria-label="Search media"
           />
 
@@ -174,7 +199,7 @@ export default function GalleryPage() {
               { value: 'photo', label: 'Photos' },
               { value: 'video', label: 'Videos' },
             ]}
-            style={{ width: 130 }}
+            style={{ flex: '1 1 140px', minWidth: 120 }}
             aria-label="Filter by media type"
           />
 
@@ -187,7 +212,7 @@ export default function GalleryPage() {
           </Tooltip>
 
           {/* Grid columns */}
-          <Group gap="xs" style={{ minWidth: 150 }}>
+          <Group gap="xs" style={{ flex: '1 1 180px', minWidth: 0 }}>
             <IconGrid3x3 size={16} color={brand} aria-hidden />
             <Slider
               value={thumbSize}
@@ -214,7 +239,7 @@ export default function GalleryPage() {
               { value: '70', label: '70 per page' },
               { value: '84', label: '84 per page' },
             ]}
-            style={{ width: 170 }}
+            style={{ flex: '1 1 170px', minWidth: 140 }}
             aria-label="Media items per page"
             placeholder={`Auto (${defaultPageSize})`}
             clearable
@@ -311,10 +336,10 @@ export default function GalleryPage() {
                     <img
                       src={mediaThumbUrl(mapId!, m.id)}
                       alt={m.user_caption ?? m.original_name}
-                      style={{ width: '100%', height: thumbSize, objectFit: 'cover', display: 'block' }}
+                      style={{ width: '100%', height: effectiveThumbHeight, objectFit: 'cover', display: 'block' }}
                     />
                   ) : (
-                    <Box style={{ width: '100%', height: thumbSize, display: 'flex',
+                    <Box style={{ width: '100%', height: effectiveThumbHeight, display: 'flex',
                       alignItems: 'center', justifyContent: 'center' }}>
                       <IconPhoto size={32} color={brand} aria-hidden />
                     </Box>
@@ -347,7 +372,8 @@ export default function GalleryPage() {
 
       {/* Uploader modal */}
       <Modal opened={uploaderOpen} onClose={() => { closeUploader(); qc.invalidateQueries({ queryKey: ['media', mapId] }) }}
-        title={<Text fw={700}>Upload Media</Text>} size="lg" radius="lg" centered>
+        title={<Text fw={700}>Upload Media</Text>} size="lg" radius="lg" centered
+        closeOnEscape={false} closeOnClickOutside={false} keepMounted>
         <MediaUploader mapId={mapId!} onUploadComplete={() => { closeUploader(); qc.invalidateQueries({ queryKey: ['media', mapId] }) }} />
       </Modal>
 
