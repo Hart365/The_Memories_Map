@@ -29,6 +29,7 @@ import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/
 import { buildTimelineColorMap } from '@/lib/timelineColors'
 import { YEAR_BAR_COLORS } from '@/styles/mantine-theme'
 import { formatUserDate } from '@/lib/dateFormatting'
+import { fetchAllMapMedia } from '@/lib/fetchAllMapMedia'
 
 const markerIconCache = new Map<string, L.DivIcon>()
 
@@ -145,7 +146,7 @@ export default function MapViewPage() {
   })
   const { data: allMedia = [], isLoading } = useQuery<MediaFile[]>({
     queryKey: ['media', mapId],
-    queryFn: () => api.get(`/maps/${mapId}/media`).then((r) => r.data.data),
+    queryFn: () => fetchAllMapMedia(mapId!),
   })
 
   const geoMedia = useMemo(() => allMedia.filter((m) => m.latitude !== null && m.longitude !== null), [allMedia])

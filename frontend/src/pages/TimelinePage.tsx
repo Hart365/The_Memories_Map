@@ -26,6 +26,7 @@ import { buildTimelineColorMap } from '@/lib/timelineColors'
 import { formatUserDate, formatUserDateTime } from '@/lib/dateFormatting'
 import ProgressiveMediaImage from '@/components/media/ProgressiveMediaImage'
 import VirtualizedMediaGrid from '@/components/media/VirtualizedMediaGrid'
+import { fetchAllMapMedia } from '@/lib/fetchAllMapMedia'
 
 type DrillLevel = 'year' | 'month' | 'day' | 'hour'
 
@@ -81,7 +82,7 @@ export default function TimelinePage() {
 
   const { data: allMedia = [], isLoading } = useQuery<MediaFile[]>({
     queryKey: ['media', mapId],
-    queryFn: () => api.get(`/maps/${mapId}/media`).then((r) => r.data.data),
+    queryFn: () => fetchAllMapMedia(mapId!),
   })
 
   const mediaWithDates = useMemo(() =>

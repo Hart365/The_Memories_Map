@@ -32,8 +32,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$RootDir    = (Resolve-Path (Join-Path $PSScriptRoot "..\.." )).Path
-$PkgJson    = Join-Path $RootDir "frontend\package.json"
+$RootDir = (Resolve-Path (Join-Path $PSScriptRoot "..\.." )).Path
+$PkgJson = Join-Path $RootDir "frontend\package.json"
 $ReleaseDir = Join-Path $RootDir "deploy\releases"
 
 # 1. Read current version
@@ -55,7 +55,8 @@ Write-Host "New version     : $newVersion"
 # 2. Write new version to package.json
 $rawJson = Get-Content $PkgJson -Raw
 $rawJson = $rawJson -replace ([regex]::Escape('"version": "' + $currentVersion + '"')), ('"version": "' + $newVersion + '"')
-[System.IO.File]::WriteAllText($PkgJson, $rawJson, [System.Text.Encoding]::UTF8)
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($PkgJson, $rawJson, $utf8NoBom)
 Write-Host "--> frontend/package.json updated to $newVersion"
 
 # 3. Docker build + lint validation
@@ -72,15 +73,16 @@ if (-not $SkipBuild) {
         Pop-Location
     }
     Write-Host "--> Build + lint: PASSED"
-} else {
+}
+else {
     Write-Host "--> SkipBuild flag set - skipping Docker validation"
 }
 
 # 4. Create release zip
 # Date in YYYY-DD-MM format (year-day-month, as specified)
 $datePart = Get-Date -Format "yyyy-dd-MM"
-$zipName  = "${datePart}-Memories_Map_${newVersion}.zip"
-$zipPath  = Join-Path $ReleaseDir $zipName
+$zipName = "${datePart}-Memories_Map_${newVersion}.zip"
+$zipPath = Join-Path $ReleaseDir $zipName
 
 Write-Host "--> Creating release archive: $zipName"
 & (Join-Path $PSScriptRoot "create_release_zip.ps1") -IncludeVendor -SkipFrontendBuild -OutputPath $zipPath
@@ -108,7 +110,8 @@ try {
             throw "git push failed with exit code $LASTEXITCODE."
         }
         Write-Host "--> Push complete"
-    } else {
+    }
+    else {
         Write-Host "--> SkipPush flag set - skipping git push"
     }
 }

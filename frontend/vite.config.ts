@@ -4,7 +4,9 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 
-const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')) as { version: string }
+const pkg = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8').replace(/^\uFEFF/, ''),
+) as { version: string }
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:8080'

@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
     working_dir: /var/www/memories-map/backend
     command: >
-      sh -c "php artisan queue:work --queue=media-processing,default --tries=5 --timeout=240 --sleep=2 --backoff=10"
+      sh -c "php artisan migrate --force && php artisan queue:ensure-infrastructure && php artisan queue:work --queue=media-processing,default --tries=5 --timeout=240 --sleep=2 --backoff=10"
     volumes:
       - ./backend:/var/www/memories-map/backend
       - media_data:/var/memories-map/media

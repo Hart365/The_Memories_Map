@@ -24,6 +24,7 @@ import BulkEditModal from '@/components/media/BulkEditModal'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import ProgressiveMediaImage from '@/components/media/ProgressiveMediaImage'
 import VirtualizedMediaGrid from '@/components/media/VirtualizedMediaGrid'
+import { fetchAllMapMedia } from '@/lib/fetchAllMapMedia'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { formatUserDate } from '@/lib/dateFormatting'
 
@@ -51,7 +52,7 @@ export default function GalleryPage() {
   })
   const { data: allMedia = [], isLoading, isError } = useQuery<MediaFile[]>({
     queryKey: ['media', mapId],
-    queryFn: () => api.get(`/maps/${mapId}/media`).then((r) => r.data.data),
+    queryFn: () => fetchAllMapMedia(mapId!),
   })
 
   const filteredSorted = useMemo(() => {
