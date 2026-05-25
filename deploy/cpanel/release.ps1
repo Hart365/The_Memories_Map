@@ -96,11 +96,17 @@ try {
     Write-Host "--> Staging all changes for commit"
     git add -A
     git commit -m $CommitMessage
+    if ($LASTEXITCODE -ne 0) {
+        throw "git commit failed with exit code $LASTEXITCODE."
+    }
     Write-Host "--> Committed: $CommitMessage"
 
     if (-not $SkipPush) {
         Write-Host "--> Pushing to origin"
         git push
+        if ($LASTEXITCODE -ne 0) {
+            throw "git push failed with exit code $LASTEXITCODE."
+        }
         Write-Host "--> Push complete"
     } else {
         Write-Host "--> SkipPush flag set - skipping git push"
