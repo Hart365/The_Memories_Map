@@ -1,6 +1,0 @@
---> Staging release package
---> Copying vendor directory (this may take a minute)
---> Creating vendor recovery bundle
---> Creating zip archive
-==> Release archive created
-./deploy/releases/memories-map-cpanel-with-vendor-20260525-154615.zip

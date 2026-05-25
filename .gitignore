@@ -35,3 +35,8 @@ Thumbs.db
 /backend/public/assets/
 /backend/public/index.html
 !/backend/public/.gitkeep
+
+# Local release archives and logs (built by local scripts)
+/deploy/releases/*.zip
+/deploy/releases/*.log
+!/deploy/releases/.gitkeep

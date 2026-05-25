@@ -1,0 +1,84 @@
+name: Build Release Archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_vendor:
+        description: Include backend/vendor in the archive
+        required: true
+        default: true
+        type: boolean
+      create_github_release:
+        description: Attach archive to a GitHub Release (tag runs only)
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-archive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+
+      - name: Build release archive
+        id: build_archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION=$(node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('frontend/package.json','utf8').replace(/^\uFEFF/, '')); process.stdout.write(p.version)")
+          DATE_PART=$(date +%Y-%d-%m)
+          ARCHIVE_NAME="${DATE_PART}-Memories_Map_${VERSION}.zip"
+          OUTPUT_PATH="$RUNNER_TEMP/$ARCHIVE_NAME"
+
+          INCLUDE_VENDOR="false"
+          if [ "${{ inputs.include_vendor || true }}" = "true" ]; then
+            INCLUDE_VENDOR="true"
+          fi
+
+          if [ "$INCLUDE_VENDOR" = "true" ]; then
+            bash deploy/cpanel/create_release_zip.sh --include-vendor --output="$OUTPUT_PATH"
+          else
+            bash deploy/cpanel/create_release_zip.sh --output="$OUTPUT_PATH"
+          fi
+
+          echo "archive_name=$ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
+          echo "archive_path=$OUTPUT_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build_archive.outputs.archive_name }}
+          path: ${{ steps.build_archive.outputs.archive_path }}
+          if-no-files-found: error
+
+      - name: Publish archive to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') && (inputs.create_github_release == true || github.event_name == 'push')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.build_archive.outputs.archive_path }}
