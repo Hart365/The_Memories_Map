@@ -37,6 +37,9 @@ fi
 
 if [ "$SKIP_FRONTEND_BUILD" = "false" ]; then
   echo "--> Building frontend assets"
+  # Clean only generated frontend artifacts; keep backend/public/index.php and .htaccess intact.
+  rm -rf "$ROOT_DIR/backend/public/assets"/*
+  rm -f "$ROOT_DIR/backend/public/index.html"
   cd "$ROOT_DIR/frontend"
   "$NPM_BIN" ci
   "$NPM_BIN" run build
@@ -48,25 +51,36 @@ PACKAGE_ROOT="$STAGE_ROOT/memories-map"
 mkdir -p "$PACKAGE_ROOT"
 
 if command -v rsync >/dev/null 2>&1; then
-  rsync -a --exclude='vendor' --exclude='storage/logs/*' --exclude='storage/framework/cache/*' --exclude='storage/framework/sessions/*' --exclude='storage/framework/views/*' "$ROOT_DIR/backend/" "$PACKAGE_ROOT/backend/"
+  rsync -a --exclude='.env' --exclude='vendor' --exclude='storage/app/*' --exclude='storage/logs/*' --exclude='storage/framework/cache/*' --exclude='storage/framework/sessions/*' --exclude='storage/framework/views/*' "$ROOT_DIR/backend/" "$PACKAGE_ROOT/backend/"
   rsync -a --exclude='node_modules' "$ROOT_DIR/frontend/" "$PACKAGE_ROOT/frontend/"
 else
   cp -R "$ROOT_DIR/backend" "$PACKAGE_ROOT/backend"
   cp -R "$ROOT_DIR/frontend" "$PACKAGE_ROOT/frontend"
 fi
 
-cp -R "$ROOT_DIR/deploy" "$PACKAGE_ROOT/deploy"
+mkdir -p "$PACKAGE_ROOT/deploy"
+cp -R "$ROOT_DIR/deploy/cpanel" "$PACKAGE_ROOT/deploy/cpanel"
+cp "$ROOT_DIR/deploy/CPANEL_SOFTACULOUS_INSTALL.md" "$PACKAGE_ROOT/deploy/CPANEL_SOFTACULOUS_INSTALL.md"
 cp "$ROOT_DIR/README.md" "$PACKAGE_ROOT/README.md"
 
 # Vendor directory
 if [ "$INCLUDE_VENDOR" = "true" ]; then
   echo "--> Copying vendor directory (this may take a minute)"
   cp -R "$ROOT_DIR/backend/vendor" "$PACKAGE_ROOT/backend/vendor"
+
+  echo "--> Creating vendor recovery bundle"
+  rm -f "$PACKAGE_ROOT/deploy/cpanel/vendor.bundle.zip"
+  (
+    cd "$ROOT_DIR/backend"
+    zip -rq "$PACKAGE_ROOT/deploy/cpanel/vendor.bundle.zip" vendor
+  )
 else
   rm -rf "$PACKAGE_ROOT/backend/vendor"
 fi
 
 rm -rf "$PACKAGE_ROOT/frontend/node_modules"
+rm -f "$PACKAGE_ROOT/backend/.env"
+rm -rf "$PACKAGE_ROOT/backend/storage/app"/*
 rm -rf "$PACKAGE_ROOT/backend/storage/logs"/*
 rm -rf "$PACKAGE_ROOT/backend/storage/framework/cache"/*
 rm -rf "$PACKAGE_ROOT/backend/storage/framework/sessions"/*

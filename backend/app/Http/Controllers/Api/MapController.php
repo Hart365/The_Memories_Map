@@ -7,6 +7,8 @@ use App\Models\MemoriesMap;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class MapController extends Controller
 {
@@ -14,14 +16,45 @@ class MapController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $maps = $request->user()
+        $validated = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'cursor' => ['nullable', 'string'],
+            'sort' => ['nullable', 'in:updated_at_desc,updated_at_asc,name_asc,name_desc'],
+        ]);
+
+        $query = $request->user()
             ->memoriesMaps()
             ->with('colorTheme')
-            ->withCount('mediaFiles')
-            ->orderByDesc('updated_at')
-            ->get();
+            ->withCount('mediaFiles');
 
-        return response()->json($maps);
+        $sort = (string) ($validated['sort'] ?? 'updated_at_desc');
+
+        if ($sort === 'updated_at_asc') {
+            $query->orderBy('updated_at')->orderBy('id');
+        } elseif ($sort === 'name_asc') {
+            $query->orderBy('name')->orderBy('id');
+        } elseif ($sort === 'name_desc') {
+            $query->orderByDesc('name')->orderByDesc('id');
+        } else {
+            $query->orderByDesc('updated_at')->orderByDesc('id');
+        }
+
+        if (!$request->filled('per_page') && !$request->filled('cursor')) {
+            return response()->json($query->get());
+        }
+
+        $perPage = (int) ($validated['per_page'] ?? 20);
+        $maps = $query->cursorPaginate($perPage, ['*'], 'cursor', $validated['cursor'] ?? null);
+
+        return response()->json([
+            'data' => $maps->items(),
+            'meta' => [
+                'per_page' => $maps->perPage(),
+                'next_cursor' => $maps->nextCursor()?->encode(),
+                'prev_cursor' => $maps->previousCursor()?->encode(),
+                'has_more' => $maps->hasMorePages(),
+            ],
+        ]);
     }
 
     public function store(Request $request): JsonResponse
@@ -77,7 +110,20 @@ class MapController extends Controller
     public function destroy(Request $request, MemoriesMap $map): JsonResponse
     {
         $this->authorize('delete', $map);
-        $map->delete();
+
+        try {
+            $map->forceDelete();
+        } catch (Throwable $e) {
+            Log::error('Map delete failed', [
+                'map_id' => $map->id,
+                'user_id' => $request->user()?->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Unable to delete this map right now. Please try again, or contact support if it persists.',
+            ], 500);
+        }
 
         return response()->json(null, 204);
     }

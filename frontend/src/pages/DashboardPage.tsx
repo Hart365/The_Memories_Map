@@ -58,7 +58,11 @@ export default function DashboardPage() {
       qc.invalidateQueries({ queryKey: ['maps'] })
       notifications.show({ message: 'Map deleted.', color: 'orange' })
     },
-    onError: () => notifications.show({ message: 'Failed to delete map.', color: 'red' }),
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? 'Failed to delete map.'
+      notifications.show({ message, color: 'red' })
+    },
   })
 
   const shareMap = useMutation({

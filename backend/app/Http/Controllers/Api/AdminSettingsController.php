@@ -81,14 +81,20 @@ class AdminSettingsController extends Controller
             'to_email' => ['required', 'email:rfc,dns', 'max:255'],
         ]);
 
-        $this->mailSettings->applyConfiguredMailer();
+        try {
+            $this->mailSettings->applyConfiguredMailer();
 
-        Mail::raw('This is a test email from Memories Map admin mail configuration.', function ($message) use ($validated) {
-            $message->to($validated['to_email'])
-                ->subject('Memories Map: Admin Mail Configuration Test');
-        });
+            Mail::raw('This is a test email from Memories Map admin mail configuration.', function ($message) use ($validated) {
+                $message->to($validated['to_email'])
+                    ->subject('Memories Map: Admin Mail Configuration Test');
+            });
 
-        return response()->json(['message' => 'Test email sent.']);
+            return response()->json(['message' => 'Test email sent.']);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Test email failed: ' . $e->getMessage(),
+            ], 422);
+        }
     }
 
     public function testConnection(): JsonResponse

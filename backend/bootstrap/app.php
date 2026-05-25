@@ -17,6 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
 
+        $middleware->api(append: [
+            \App\Http\Middleware\ApiRequestMetrics::class,
+        ]);
+
         // Do not redirect API clients to a web login route; return 401 instead.
         $middleware->redirectGuestsTo(function (Request $request): ?string {
             return $request->is('api/*') || $request->expectsJson()

@@ -47,10 +47,27 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
     setFilePendingRemoval(i)
   }
 
+  const retryFile = (index: number) => {
+    setFiles((prev) => prev.map((item, idx) => idx === index
+      ? { ...item, status: 'pending', progress: 0, errorMessage: undefined }
+      : item,
+    ))
+  }
+
+  const retryAllFailed = () => {
+    setFiles((prev) => prev.map((item) => item.status === 'error'
+      ? { ...item, status: 'pending', progress: 0, errorMessage: undefined }
+      : item,
+    ))
+  }
+
   const upload = async () => {
     const pending = files.filter((f) => f.status === 'pending')
     if (pending.length === 0) return
     setUploading(true)
+    let successCount = 0
+    let duplicateCount = 0
+    let errorCount = 0
     for (let i = 0; i < files.length; i++) {
       if (files[i].status !== 'pending') continue
       setFiles((prev) => prev.map((f, idx) => idx === i ? { ...f, status: 'uploading', progress: 10 } : f))
@@ -68,6 +85,11 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
         const skipped = Number(response?.data?.skipped_count ?? 0)
         const created = Number(response?.data?.created_count ?? 0)
         const nextStatus: FileStatus = skipped > 0 && created === 0 ? 'duplicate' : 'success'
+        if (nextStatus === 'success') {
+          successCount++
+        } else if (nextStatus === 'duplicate') {
+          duplicateCount++
+        }
 
         setFiles((prev) => prev.map((f, idx) => idx === i
           ? { ...f, status: nextStatus, progress: 100, errorMessage: undefined }
@@ -100,10 +122,18 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
           }
           : f,
         ))
+        if (status !== 409) {
+          errorCount++
+        } else {
+          duplicateCount++
+        }
       }
     }
     setUploading(false)
-    notifications.show({ message: 'Upload complete!', color: 'teal' })
+    notifications.show({
+      message: `Upload finished: ${successCount} success, ${duplicateCount} duplicates, ${errorCount} failed.`,
+      color: errorCount > 0 ? 'orange' : 'teal',
+    })
     onUploadComplete?.()
   }
 
@@ -148,6 +178,14 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
 
       {files.length > 0 && (
         <Stack gap={6} style={{ maxHeight: 300, overflowY: 'auto' }}>
+          {files.some((item) => item.status === 'error') && (
+            <Group justify="space-between" py={4}>
+              <Text size="xs" c="dimmed">Some files failed. Retry failed uploads without reselecting files.</Text>
+              <Button size="xs" variant="default" styles={getMapSectionButtonStyles('upload', 'solid')} onClick={retryAllFailed}>
+                Retry Failed
+              </Button>
+            </Group>
+          )}
           {files.map((item, i) => (
             <Group key={i} gap="sm" wrap="nowrap" style={{
               padding: '8px 12px',
@@ -173,6 +211,11 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
                     <IconTrash size={14} aria-hidden />
                   </ActionIcon>
                 </Tooltip>
+              )}
+              {item.status === 'error' && (
+                <Button size="xs" variant="default" styles={getMapSectionButtonStyles('upload', 'solid')} onClick={() => retryFile(i)}>
+                  Retry
+                </Button>
               )}
               {item.status === 'error' && item.errorMessage && (
                 <Text size="xs" c="red" title={item.errorMessage} style={{ maxWidth: 220 }} lineClamp={2}>

@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedStringOrPlaintextCast;
+use App\Services\MediaProcessingService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class MemoriesMap extends Model
 {
@@ -12,6 +15,7 @@ class MemoriesMap extends Model
 
     protected $fillable = [
         'user_id',
+        'map_uid',
         'name',
         'description',
         'color_theme_id',
@@ -21,6 +25,8 @@ class MemoriesMap extends Model
     protected function casts(): array
     {
         return [
+            'name' => EncryptedStringOrPlaintextCast::class,
+            'description' => EncryptedStringOrPlaintextCast::class,
             'is_public' => 'boolean',
         ];
     }
@@ -48,5 +54,23 @@ class MemoriesMap extends Model
     public function colorTheme()
     {
         return $this->belongsTo(ColorTheme::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $map): void {
+            if (empty($map->map_uid)) {
+                $map->map_uid = (string) Str::uuid();
+            }
+        });
+
+        static::deleting(function (self $map): void {
+            /** @var MediaProcessingService $mediaProcessor */
+            $mediaProcessor = app(MediaProcessingService::class);
+
+            $map->mediaFiles()->withTrashed()->get()->each(function (MediaFile $media) use ($mediaProcessor): void {
+                $mediaProcessor->delete($media);
+            });
+        });
     }
 }

@@ -24,6 +24,8 @@ import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { buildTimelineColorMap } from '@/lib/timelineColors'
 import { formatUserDate, formatUserDateTime } from '@/lib/dateFormatting'
+import ProgressiveMediaImage from '@/components/media/ProgressiveMediaImage'
+import VirtualizedMediaGrid from '@/components/media/VirtualizedMediaGrid'
 
 type DrillLevel = 'year' | 'month' | 'day' | 'hour'
 
@@ -609,8 +611,13 @@ export default function TimelinePage() {
                       </Text>
                       <Badge variant="light" color="teal">{media_.length} item{media_.length !== 1 ? 's' : ''}</Badge>
                     </Group>
-                    <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: hourGridCols }} spacing="sm">
-                      {media_.map((m) => (
+                    <VirtualizedMediaGrid
+                      items={media_}
+                      columns={hourGridCols}
+                      itemHeight={effectiveThumbHeight + 90}
+                      height={520}
+                      keyExtractor={(m) => m.id}
+                      renderItem={(m) => (
                         <Paper key={m.id} radius="md" style={{ overflow: 'hidden', cursor: 'pointer', backgroundColor: surface, border, position: 'relative' }}>
                           <Box style={{ position: 'absolute', top: 6, left: 6, zIndex: 2 }}>
                             <Checkbox
@@ -627,33 +634,33 @@ export default function TimelinePage() {
                             role="button"
                             aria-label={`${m.original_name}. Captured ${formatUserDateTime(m.captured_at_local || m.captured_at, '')}`}
                           >
-                          {m.thumbnail_name ? (
-                            <img src={mediaThumbUrl(mapId!, m.id)}
-                              alt={m.original_name}
-                              style={{ width: '100%', height: effectiveThumbHeight, objectFit: 'cover', display: 'block' }} />
-                          ) : (
-                            <Box style={{ width: '100%', height: effectiveThumbHeight, backgroundColor: isDark ? '#2a3340' : '#f0f4f8',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <IconPhoto size={32} color={brand} aria-hidden />
-                            </Box>
-                          )}
-                          <Box p="xs">
-                            <Text size="xs" fw={600} lineClamp={1} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
-                              {m.user_caption || m.location_name || m.location_city || 'Place unavailable'}
-                            </Text>
-                            <Text size="xs" c="dimmed" lineClamp={1}>
-                              {m.location_name || m.location_city || 'Place unavailable'}
-                            </Text>
-                            {m.captured_at && (
-                              <Text size="xs" c="dimmed">
-                                {formatUserDate(m.captured_at_local || m.captured_at)}
-                              </Text>
+                            {m.thumbnail_name ? (
+                              <ProgressiveMediaImage src={mediaThumbUrl(mapId!, m.id)}
+                                alt={m.original_name}
+                                style={{ width: '100%', height: effectiveThumbHeight, objectFit: 'cover', display: 'block' }} />
+                            ) : (
+                              <Box style={{ width: '100%', height: effectiveThumbHeight, backgroundColor: isDark ? '#2a3340' : '#f0f4f8',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <IconPhoto size={32} color={brand} aria-hidden />
+                              </Box>
                             )}
-                          </Box>
+                            <Box p="xs">
+                              <Text size="xs" fw={600} lineClamp={1} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>
+                                {m.user_caption || m.location_name || m.location_city || 'Place unavailable'}
+                              </Text>
+                              <Text size="xs" c="dimmed" lineClamp={1}>
+                                {m.location_name || m.location_city || 'Place unavailable'}
+                              </Text>
+                              {m.captured_at && (
+                                <Text size="xs" c="dimmed">
+                                  {formatUserDate(m.captured_at_local || m.captured_at)}
+                                </Text>
+                              )}
+                            </Box>
                           </Box>
                         </Paper>
-                      ))}
-                    </SimpleGrid>
+                      )}
+                    />
                   </Box>
                 ))}
               </Stack>

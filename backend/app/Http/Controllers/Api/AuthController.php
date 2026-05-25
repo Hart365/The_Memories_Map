@@ -87,8 +87,13 @@ class AuthController extends Controller
             'map_id'   => ['required', 'integer'],
         ]);
 
-        $guest = MapGuest::where('email', $request->email)
-            ->where('map_id', $request->map_id)
+        $normalizedEmail = strtolower(trim((string) $request->email));
+
+        $guest = MapGuest::where('map_id', $request->map_id)
+            ->where(function ($query) use ($normalizedEmail) {
+                $query->where('email_hash', MapGuest::hashEmail($normalizedEmail))
+                    ->orWhere('email', $normalizedEmail);
+            })
             ->first();
 
         if (! $guest || ! Hash::check($request->password, $guest->password)) {

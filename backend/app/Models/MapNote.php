@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedStringOrPlaintextCast;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -28,6 +29,8 @@ class MapNote extends Model
             'day_date'  => 'date',
             'latitude'  => 'float',
             'longitude' => 'float',
+            'title'     => EncryptedStringOrPlaintextCast::class,
+            'body'      => EncryptedStringOrPlaintextCast::class,
         ];
     }
 

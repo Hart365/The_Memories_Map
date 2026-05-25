@@ -16,7 +16,59 @@ class NoteController extends Controller
     public function index(Request $request, MemoriesMap $map): JsonResponse
     {
         $this->authorize('view', $map);
-        return response()->json($map->notes()->orderBy('day_date')->get());
+
+        $validated = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'cursor' => ['nullable', 'string'],
+            'note_type' => ['nullable', 'in:map,day,location,media'],
+            'media_id' => ['nullable', 'integer', 'min:1'],
+            'search' => ['nullable', 'string', 'max:100'],
+            'sort' => ['nullable', 'in:day_date_asc,day_date_desc,created_at_desc'],
+        ]);
+
+        $query = $map->notes();
+
+        if (!empty($validated['note_type'])) {
+            $query->where('note_type', $validated['note_type']);
+        }
+
+        if (!empty($validated['media_id'])) {
+            $query->where('media_id', (int) $validated['media_id']);
+        }
+
+        if (!empty($validated['search'])) {
+            $search = (string) $validated['search'];
+            $query->where(function ($inner) use ($search) {
+                $inner->where('title', 'like', '%' . $search . '%')
+                    ->orWhere('body', 'like', '%' . $search . '%');
+            });
+        }
+
+        $sort = (string) ($validated['sort'] ?? 'day_date_asc');
+        if ($sort === 'day_date_desc') {
+            $query->orderByDesc('day_date')->orderByDesc('id');
+        } elseif ($sort === 'created_at_desc') {
+            $query->orderByDesc('created_at')->orderByDesc('id');
+        } else {
+            $query->orderBy('day_date')->orderBy('id');
+        }
+
+        if (!$request->filled('per_page') && !$request->filled('cursor')) {
+            return response()->json($query->get());
+        }
+
+        $perPage = (int) ($validated['per_page'] ?? 30);
+        $page = $query->cursorPaginate($perPage, ['*'], 'cursor', $validated['cursor'] ?? null);
+
+        return response()->json([
+            'data' => $page->items(),
+            'meta' => [
+                'per_page' => $page->perPage(),
+                'next_cursor' => $page->nextCursor()?->encode(),
+                'prev_cursor' => $page->previousCursor()?->encode(),
+                'has_more' => $page->hasMorePages(),
+            ],
+        ]);
     }
 
     public function store(Request $request, MemoriesMap $map): JsonResponse
@@ -68,6 +120,6 @@ class NoteController extends Controller
 
     public function indexShared(MemoriesMap $map): JsonResponse
     {
-        return response()->json($map->notes()->orderBy('day_date')->get());
+        return response()->json($map->notes()->orderBy('day_date')->orderBy('id')->get());
     }
 }

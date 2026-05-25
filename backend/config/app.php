@@ -56,6 +56,11 @@ return [
 
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
 
+    'media_processing_queue' => env('MEDIA_PROCESSING_QUEUE', 'media-processing'),
+    'media_processing_tries' => (int) env('MEDIA_PROCESSING_TRIES', 5),
+    'media_processing_timeout_seconds' => (int) env('MEDIA_PROCESSING_TIMEOUT_SECONDS', 240),
+    'media_processing_backoff_seconds' => env('MEDIA_PROCESSING_BACKOFF_SECONDS', '10,30,90,180'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

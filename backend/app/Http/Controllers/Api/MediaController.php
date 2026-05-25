@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Laravel\Sanctum\PersonalAccessToken;
 use Illuminate\Validation\Rules\File;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class MediaController extends Controller
 {
@@ -25,17 +26,72 @@ class MediaController extends Controller
     {
         $this->authorize('view', $map);
 
-        $query = $map->mediaFiles()->orderBy('captured_at');
+        $validated = $request->validate([
+            'date' => ['nullable', 'date'],
+            'has_location' => ['nullable', 'boolean'],
+            'sort' => ['nullable', 'in:captured_at_asc,captured_at_desc,created_at_desc,size_desc'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'cursor' => ['nullable', 'string'],
+            'q' => ['nullable', 'string', 'max:200'],
+        ]);
+
+        $query = $map->mediaFiles();
 
         if ($request->filled('date')) {
             $query->whereDate('captured_at', $request->date);
+        }
+
+        if ($request->filled('q')) {
+            $term = '%' . addcslashes($validated['q'], '%_\\') . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('user_caption', 'LIKE', $term)
+                  ->orWhere('location_name', 'LIKE', $term)
+                  ->orWhere('location_city', 'LIKE', $term)
+                  ->orWhere('location_country', 'LIKE', $term)
+                  ->orWhere('original_name', 'LIKE', $term)
+                  ->orWhere('user_tags', 'LIKE', $term);
+            });
         }
 
         if ($request->filled('has_location')) {
             $query->whereNotNull('latitude')->whereNotNull('longitude');
         }
 
-        return response()->json(['data' => $query->get()]);
+        $sort = (string) ($validated['sort'] ?? 'captured_at_asc');
+
+        if ($sort === 'captured_at_desc') {
+            $query->orderByDesc('captured_at')->orderByDesc('id');
+        } elseif ($sort === 'created_at_desc') {
+            $query->orderByDesc('created_at')->orderByDesc('id');
+        } elseif ($sort === 'size_desc') {
+            $query->orderByDesc('size_bytes')->orderByDesc('id');
+        } else {
+            $query->orderBy('captured_at')->orderBy('id');
+        }
+
+        $perPage = (int) ($validated['per_page'] ?? 50);
+        $page = $query->cursorPaginate($perPage, ['*'], 'cursor', $validated['cursor'] ?? null);
+
+        $items = collect($page->items())
+            ->filter(fn (MediaFile $media): bool => $this->mediaSourceExists($media))
+            ->map(function (MediaFile $media): MediaFile {
+                if ($media->thumbnail_name && !$this->mediaThumbnailExists($media)) {
+                    $media->thumbnail_name = null;
+                }
+
+                return $media;
+            })
+            ->values();
+
+        return response()->json([
+            'data' => $items,
+            'meta' => [
+                'per_page' => $page->perPage(),
+                'next_cursor' => $page->nextCursor()?->encode(),
+                'prev_cursor' => $page->previousCursor()?->encode(),
+                'has_more' => $page->hasMorePages(),
+            ],
+        ]);
     }
 
     public function store(Request $request, MemoriesMap $map): JsonResponse
@@ -64,7 +120,7 @@ class MediaController extends Controller
         $duplicates = [];
         $duplicateOptions = $this->normalizeDuplicateOptions($request->input('duplicate_options', []));
 
-        // Get existing media files with key attributes for duplicate detection
+        // Get existing media only within this map for duplicate detection.
         $existingMedia = $map->mediaFiles()
             ->get(['id', 'original_name', 'size_bytes', 'captured_at', 'latitude', 'longitude', 'camera_make', 'camera_model'])
             ->keyBy('id');
@@ -308,6 +364,26 @@ class MediaController extends Controller
         return response()->json($media->load('notes'));
     }
 
+    public function processingStatus(Request $request, MemoriesMap $map, MediaFile $media): JsonResponse
+    {
+        $this->authorize('view', $map);
+        $this->ensureBelongsToMap($media, $map);
+
+        $fresh = $media->fresh();
+
+        return response()->json([
+            'id' => $fresh?->id,
+            'processing_status' => $fresh?->processing_status,
+            'processing_stage' => $fresh?->processing_stage,
+            'processing_attempts' => $fresh?->processing_attempts,
+            'processing_error' => $fresh?->processing_error,
+            'processing_started_at' => $fresh?->processing_started_at,
+            'processing_finished_at' => $fresh?->processing_finished_at,
+            'processed_at' => $fresh?->processed_at,
+            'thumbnail_name' => $fresh?->thumbnail_name,
+        ]);
+    }
+
     public function update(Request $request, MemoriesMap $map, MediaFile $media): JsonResponse
     {
         $this->authorize('update', $map);
@@ -391,7 +467,7 @@ class MediaController extends Controller
     }
 
     /** Serve the raw media file (owner only). */
-    public function serveFile(Request $request, MemoriesMap $map, MediaFile $media): BinaryFileResponse
+    public function serveFile(Request $request, MemoriesMap $map, MediaFile $media): BinaryFileResponse|Response
     {
         $this->authorize('view', $map);
         $this->ensureBelongsToMap($media, $map);
@@ -399,6 +475,13 @@ class MediaController extends Controller
         $path = $this->processor->storagePath($media->stored_name);
 
         abort_unless(file_exists($path), 404);
+
+        if ($this->processor->isEncryptedFile($path)) {
+            return response($this->processor->readDecryptedContents($path), 200, [
+                'Content-Type' => $media->mime_type,
+                'Cache-Control' => 'private, no-store, max-age=0',
+            ]);
+        }
 
         return response()->file($path, [
             'Content-Type' => $media->mime_type,
@@ -408,7 +491,7 @@ class MediaController extends Controller
     /**
      * Serve media file for <img>/<video> tags using token query auth.
      */
-    public function serveFileToken(Request $request, MemoriesMap $map, MediaFile $media): BinaryFileResponse
+    public function serveFileToken(Request $request, MemoriesMap $map, MediaFile $media): BinaryFileResponse|Response
     {
         $this->ensureBelongsToMap($media, $map);
         $this->authorizeMapByToken($request, $map);
@@ -416,19 +499,33 @@ class MediaController extends Controller
         $path = $this->processor->storagePath($media->stored_name);
         abort_unless(file_exists($path), 404);
 
+        if ($this->processor->isEncryptedFile($path)) {
+            return response($this->processor->readDecryptedContents($path), 200, [
+                'Content-Type' => $media->mime_type,
+                'Cache-Control' => 'private, no-store, max-age=0',
+            ]);
+        }
+
         return response()->file($path, [
             'Content-Type' => $media->mime_type,
         ]);
     }
 
     /** Serve the thumbnail (also accessible to guests). */
-    public function serveThumbnail(MemoriesMap $map, MediaFile $media): BinaryFileResponse
+    public function serveThumbnail(MemoriesMap $map, MediaFile $media): BinaryFileResponse|Response
     {
         $this->ensureBelongsToMap($media, $map);
 
         $path = $this->processor->thumbnailPath($media->thumbnail_name);
 
         abort_unless($path && file_exists($path), 404);
+
+        if ($this->processor->isEncryptedFile($path)) {
+            return response($this->processor->readDecryptedContents($path), 200, [
+                'Content-Type' => 'image/webp',
+                'Cache-Control' => 'private, no-store, max-age=0',
+            ]);
+        }
 
         return response()->file($path, ['Content-Type' => 'image/webp']);
     }
@@ -436,13 +533,20 @@ class MediaController extends Controller
     /**
      * Serve thumbnail for <img> tags using token query auth.
      */
-    public function serveThumbnailToken(Request $request, MemoriesMap $map, MediaFile $media): BinaryFileResponse
+    public function serveThumbnailToken(Request $request, MemoriesMap $map, MediaFile $media): BinaryFileResponse|Response
     {
         $this->ensureBelongsToMap($media, $map);
         $this->authorizeMapByToken($request, $map);
 
         $path = $this->processor->thumbnailPath($media->thumbnail_name);
         abort_unless($path && file_exists($path), 404);
+
+        if ($this->processor->isEncryptedFile($path)) {
+            return response($this->processor->readDecryptedContents($path), 200, [
+                'Content-Type' => 'image/webp',
+                'Cache-Control' => 'private, no-store, max-age=0',
+            ]);
+        }
 
         return response()->file($path, ['Content-Type' => 'image/webp']);
     }
@@ -470,9 +574,30 @@ class MediaController extends Controller
                 'duration_seconds'
             )
             ->orderBy('captured_at')
-            ->get();
+            ->get()
+            ->filter(fn (MediaFile $item): bool => $this->mediaSourceExists($item))
+            ->map(function (MediaFile $item): MediaFile {
+                if ($item->thumbnail_name && !$this->mediaThumbnailExists($item)) {
+                    $item->thumbnail_name = null;
+                }
+
+                return $item;
+            })
+            ->values();
 
         return response()->json(['data' => $media]);
+    }
+
+    private function mediaSourceExists(MediaFile $media): bool
+    {
+        $sourcePath = $this->processor->storagePath((string) $media->stored_name);
+        return is_file($sourcePath);
+    }
+
+    private function mediaThumbnailExists(MediaFile $media): bool
+    {
+        $thumbPath = $this->processor->thumbnailPath($media->thumbnail_name);
+        return $thumbPath !== null && is_file($thumbPath);
     }
 
     private function ensureBelongsToMap(MediaFile $media, MemoriesMap $map): void

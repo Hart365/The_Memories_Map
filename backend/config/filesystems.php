@@ -16,6 +16,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Media Encryption (At Rest)
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, uploaded originals and generated thumbnails are encrypted
+    | on disk. Files are decrypted only when served through authorized API
+    | routes.
+    |
+    */
+
+    'media_encryption_enabled' => env('MEDIA_ENCRYPTION_ENABLED', true),
+    'media_encryption_key' => env('MEDIA_ENCRYPTION_KEY', env('APP_KEY')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Default Filesystem Disk
     |--------------------------------------------------------------------------
     |

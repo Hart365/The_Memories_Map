@@ -1,6 +1,6 @@
-{
+﻿{
   "name": "memories-map-frontend",
-  "version": "0.0.3.0",
+  "version": "0.0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -52,6 +52,8 @@
     "vite": "^8.0.14"
   },
   "optionalDependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.0.2"
+    "@rolldown/binding-win32-x64-msvc": "^1.0.2",
+    "@rolldown/binding-linux-x64-musl": "^1.0.2",
+    "@rolldown/binding-linux-x64-gnu": "^1.0.2"
   }
 }

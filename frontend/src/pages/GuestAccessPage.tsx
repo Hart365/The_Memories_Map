@@ -50,6 +50,7 @@ import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { buildTimelineColorMap } from '@/lib/timelineColors'
 import { YEAR_BAR_COLORS } from '@/styles/mantine-theme'
 import { formatUserDate } from '@/lib/dateFormatting'
+import ProgressiveMediaImage from '@/components/media/ProgressiveMediaImage'
 
 const guestSessionKeys = {
   accessToken: 'guest_access_token',
@@ -678,7 +679,7 @@ export default function GuestAccessPage() {
                     <Popup>
                       <Stack gap={6} style={{ minWidth: 160 }}>
                         {m.thumbnail_name && (
-                          <img
+                          <ProgressiveMediaImage
                             src={sharedMediaThumbUrl(data.id, m.id)}
                             alt={m.original_name}
                             style={{ width: '100%', borderRadius: 6, display: 'block' }}
@@ -897,7 +898,7 @@ export default function GuestAccessPage() {
                           style={{ display: 'block' }}
                         >
                           {m.thumbnail_name ? (
-                            <img
+                            <ProgressiveMediaImage
                               src={sharedMediaThumbUrl(data.id, m.id)}
                               alt={title}
                               style={{ width: '100%', height: effectiveThumbHeight, objectFit: 'cover', display: 'block' }}
@@ -951,7 +952,7 @@ export default function GuestAccessPage() {
                     <source src={sharedMediaFileUrl(data.id, activeMedia.id)} type={activeMedia.mime_type} />
                   </video>
                 ) : (
-                  <img
+                  <ProgressiveMediaImage
                     src={sharedMediaFileUrl(data.id, activeMedia.id)}
                     alt={activeMedia.user_caption ?? activeMedia.original_name}
                     style={{ width: '100%', borderRadius: 10, display: 'block' }}

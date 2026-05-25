@@ -31,8 +31,33 @@ function formatViolation(url, violation) {
   ].join('\n')
 }
 
+async function verifySkipLinkKeyboardFlow(page, url) {
+  await page.goto(url, { waitUntil: 'networkidle2' })
+  await page.keyboard.press('Tab')
+
+  const focusState = await page.evaluate(() => {
+    const active = document.activeElement
+    return {
+      href: active?.getAttribute('href'),
+    }
+  })
+
+  if (focusState.href !== '#main-content') {
+    throw new Error(`Skip link did not receive focus on ${url}`)
+  }
+
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => document.activeElement?.id === 'main-content')
+  console.log(`Keyboard skip-link passed: ${url}`)
+}
+
 async function run() {
-  const browser = await puppeteer.launch({ headless: true })
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.CHROME_PATH,
+    // Docker containers often run as root, so Chrome needs no-sandbox flags.
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  })
   let hasViolations = false
 
   try {
@@ -64,6 +89,8 @@ async function run() {
       await loginPage.type('input[type="password"]', password)
       await loginPage.click('button[type="submit"]')
       await loginPage.waitForNavigation({ waitUntil: 'networkidle2' })
+
+      await verifySkipLinkKeyboardFlow(loginPage, `${BASE_URL}/dashboard`)
 
       const authenticatedUrls = [
         `${BASE_URL}/dashboard`,

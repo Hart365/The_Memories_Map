@@ -181,15 +181,16 @@ If you already used Softaculous to create a Laravel app:
 Typical shared-hosting-safe permissions:
 
 - backend/storage and backend/bootstrap/cache must be writable by PHP
-- Folders: 755
-- Files: 644
+- Folders: 755 (owner = 7)
+- Files: 644 (owner = 6)
+
+The web installer now applies these permissions recursively across the extracted app after setup. Use the manual commands below only if your host blocks `chmod`.
 
 If needed:
 
 ```bash
-chmod -R 755 backend/storage backend/bootstrap/cache
-find backend/storage -type f -exec chmod 644 {} \;
-find backend/bootstrap/cache -type f -exec chmod 644 {} \;
+find . -type d -exec chmod 755 {} \;
+find . -type f -exec chmod 644 {} \;
 ```
 
 ## 10) Verification Checklist

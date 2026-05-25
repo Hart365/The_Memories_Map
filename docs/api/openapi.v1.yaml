@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: Memories Map API
+  version: 1.0.0
+  description: Versioned API contract baseline for Workstream B.
+servers:
+  - url: /api
+paths:
+  /maps:
+    get:
+      summary: List maps
+      parameters:
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [updated_at_desc, updated_at_asc, name_asc, name_desc]
+      responses:
+        '200':
+          description: Paginated or legacy map list.
+  /maps/{map}/media:
+    get:
+      summary: List media for a map
+      parameters:
+        - in: path
+          name: map
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [captured_at_asc, captured_at_desc, created_at_desc, size_desc]
+        - in: query
+          name: date
+          schema: { type: string, format: date }
+        - in: query
+          name: has_location
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Cursor paginated media list.
+  /maps/{map}/notes:
+    get:
+      summary: List notes for a map
+      parameters:
+        - in: path
+          name: map
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: note_type
+          schema:
+            type: string
+            enum: [map, day, location, media]
+        - in: query
+          name: media_id
+          schema: { type: integer }
+        - in: query
+          name: search
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated or legacy note list.

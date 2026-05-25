@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  Container, Title, Button, Paper, Group, Stack,
+  Container, Title, Button, Paper, Group, Stack, Text,
   TextInput, PasswordInput, Alert, Select, useComputedColorScheme,
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
@@ -187,6 +187,12 @@ export default function SettingsPage() {
           deleteAccount.mutate()
         }}
       />
+
+      <Group justify="center" mt="xl">
+        <Text size="sm" style={{ color: isDark ? '#94a3b8' : '#4a5568' }} aria-label={`Application version ${__APP_VERSION__}`}>
+          Memories Map v{__APP_VERSION__}
+        </Text>
+      </Group>
     </Container>
   )
 }

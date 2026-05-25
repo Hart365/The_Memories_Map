@@ -122,7 +122,7 @@ export default function AdminPage() {
     setTestEmail(mail.from_address ?? '')
     settingsForm.setValues(hydratedValues)
     settingsForm.resetDirty(hydratedValues)
-  }, [settingsQuery.data])
+  }, [settingsQuery.data, settingsForm])
 
   const hasUnsavedChanges = settingsForm.isDirty()
 
@@ -171,7 +171,10 @@ export default function AdminPage() {
   const testMailMutation = useMutation({
     mutationFn: () => adminApi.post('/settings/test-mail', { to_email: testEmail.trim() }),
     onSuccess: () => notifications.show({ message: 'Test email sent.', color: 'teal' }),
-    onError: () => notifications.show({ message: 'Test email failed. Check SMTP settings.', color: 'red' }),
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      notifications.show({ message: message ?? 'Test email failed. Check SMTP settings.', color: 'red' })
+    },
   })
 
   const testConnectionMutation = useMutation({

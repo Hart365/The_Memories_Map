@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedStringOrPlaintextCast;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -15,6 +16,7 @@ class MapGuest extends Model
     protected $fillable = [
         'map_id',
         'email',
+        'email_hash',
         'password',
         'access_token',
         'invited_at',
@@ -25,11 +27,13 @@ class MapGuest extends Model
     protected $hidden = [
         'password',
         'access_token',
+        'email_hash',
     ];
 
     protected function casts(): array
     {
         return [
+            'email'            => EncryptedStringOrPlaintextCast::class,
             'password'         => 'hashed',
             'invited_at'       => 'datetime',
             'expires_at'       => 'datetime',
@@ -60,6 +64,11 @@ class MapGuest extends Model
 
         return self::where('access_token', hash('sha256', $plainToken))->first()
             ?? self::where('access_token', $plainToken)->first();
+    }
+
+    public static function hashEmail(string $email): string
+    {
+        return hash('sha256', strtolower(trim($email)));
     }
 
     public function routeNotificationForMail(): string

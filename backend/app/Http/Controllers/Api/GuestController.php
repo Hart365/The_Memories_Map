@@ -42,11 +42,15 @@ class GuestController extends Controller
         ]);
 
         $normalizedEmail = strtolower(trim($validated['email']));
+        $emailHash = MapGuest::hashEmail($normalizedEmail);
 
-        // Include soft-deleted rows because DB unique index is on (map_id, email).
+        // Include soft-deleted rows because DB uniqueness is enforced on (map_id, email_hash).
         $existingGuest = MapGuest::withTrashed()
             ->where('map_id', $map->id)
-            ->where('email', $normalizedEmail)
+            ->where(function ($query) use ($emailHash, $normalizedEmail) {
+                $query->where('email_hash', $emailHash)
+                    ->orWhere('email', $normalizedEmail);
+            })
             ->first();
 
         abort_if(
@@ -64,6 +68,7 @@ class GuestController extends Controller
             $existingGuest->restore();
             $existingGuest->update([
                 'email' => $normalizedEmail,
+                'email_hash' => $emailHash,
                 'password' => Hash::make(Str::random(32)),
                 'access_token' => hash('sha256', $plainAccessToken),
                 'invited_at' => now(),
@@ -74,6 +79,7 @@ class GuestController extends Controller
         } else {
             $guest = $map->guests()->create([
                 'email'        => $normalizedEmail,
+                'email_hash'   => $emailHash,
                 'password'     => Hash::make(Str::random(32)),
                 'access_token' => hash('sha256', $plainAccessToken),
                 'invited_at'   => now(),

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import {
   Container, Title, Text, Button, Paper, Group, Box,
-  SimpleGrid, Badge, ActionIcon, Loader, Alert, Checkbox,
+  Badge, ActionIcon, Loader, Alert, Checkbox,
   Slider, Tooltip, TextInput, Modal, useComputedColorScheme,
   Select, Pagination, Menu,
 } from '@mantine/core'
@@ -22,6 +22,8 @@ import type { MemoriesMap, MediaFile } from '@/types'
 import MediaUploader from '@/components/media/MediaUploader'
 import BulkEditModal from '@/components/media/BulkEditModal'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
+import ProgressiveMediaImage from '@/components/media/ProgressiveMediaImage'
+import VirtualizedMediaGrid from '@/components/media/VirtualizedMediaGrid'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { formatUserDate } from '@/lib/dateFormatting'
 
@@ -287,14 +289,19 @@ export default function GalleryPage() {
 
       {/* Media grid */}
       {filteredSorted.length > 0 && (
-        <SimpleGrid cols={gridCols} spacing={8}
-          style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}>
-          {pagedMedia.map((m) => {
+        <VirtualizedMediaGrid
+          items={pagedMedia}
+          columns={gridCols}
+          itemHeight={effectiveThumbHeight + 92}
+          height={720}
+          keyExtractor={(m) => m.id}
+          renderItem={(m) => {
             const isSelected = selected.has(m.id)
             const isVideo = m.mime_type.startsWith('video/')
             const when = m.captured_at_local || m.captured_at
             const place = m.location_name || m.location_city || 'Place unavailable'
             const title = m.user_caption || place
+
             return (
               <Paper key={m.id} radius="md" style={{
                 position: 'relative', overflow: 'hidden', cursor: 'pointer',
@@ -302,7 +309,6 @@ export default function GalleryPage() {
                 outlineOffset: 2,
                 backgroundColor: isDark ? '#2a3340' : '#f0f4f8',
               }}>
-                {/* Checkbox overlay */}
                 <Box style={{ position: 'absolute', top: 6, left: 6, zIndex: 2 }}>
                   <Checkbox
                     checked={isSelected}
@@ -311,20 +317,17 @@ export default function GalleryPage() {
                     radius="sm"
                   />
                 </Box>
-                {/* Video badge */}
                 {isVideo && (
                   <Badge style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }}
                     color="violet" variant="filled" size="xs">
                     <IconVideo size={10} aria-hidden /> Video
                   </Badge>
                 )}
-                {/* Location badge */}
                 {m.latitude !== null && (
                   <Box style={{ position: 'absolute', bottom: 6, left: 6, zIndex: 2 }}>
                     <IconLocation size={14} color="#fff" aria-label="Has location" />
                   </Box>
                 )}
-                {/* Thumbnail */}
                 <div
                   onClick={() => navigate(`/maps/${mapId}/media/${m.id}`)}
                   onKeyDown={(e) => e.key === 'Enter' && navigate(`/maps/${mapId}/media/${m.id}`)}
@@ -334,7 +337,7 @@ export default function GalleryPage() {
                   style={{ display: 'block' }}
                 >
                   {m.thumbnail_name ? (
-                    <img
+                    <ProgressiveMediaImage
                       src={mediaThumbUrl(mapId!, m.id)}
                       alt={m.user_caption ?? m.original_name}
                       style={{ width: '100%', height: effectiveThumbHeight, objectFit: 'cover', display: 'block' }}
@@ -361,8 +364,8 @@ export default function GalleryPage() {
                 </div>
               </Paper>
             )
-          })}
-        </SimpleGrid>
+          }}
+        />
       )}
 
       {filteredSorted.length > pageSize && (

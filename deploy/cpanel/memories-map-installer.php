@@ -65,18 +65,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         // Step 2 → 3: validate app path
         case 2:
-            $path = rtrim(trim($_POST['app_path'] ?? ''), '/\\');
-            $path = realpath($path) ?: $path; // resolve symlinks
-            if (!$path || !is_dir($path)) {
-                $errors[] = 'Path not found or not accessible: ' . htmlspecialchars($path);
-            } elseif (!is_dir($path . '/backend')) {
-                $errors[] = 'Could not find a <code>backend/</code> directory inside that path. Make sure you extracted the release archive to the correct location.';
-            } elseif (!file_exists($path . '/backend/artisan')) {
-                $errors[] = 'The <code>backend/artisan</code> file is missing. This does not look like a valid Memories Map package.';
-            } elseif (!file_exists($path . '/backend/vendor/autoload.php')) {
-                $errors[] = 'The <code>backend/vendor</code> directory is missing. Please use the <strong>-with-vendor</strong> release archive, or run <code>composer install</code> inside <code>backend/</code> first.';
+            $rawPath = rtrim(trim($_POST['app_path'] ?? ''), '/\\');
+            $path = resolveApplicationPath($rawPath);
+            if (!$path) {
+                $errors[] = 'Path not found or not accessible: ' . htmlspecialchars($rawPath);
+            } elseif (!hasCriticalVendorFiles($path . '/backend') && !file_exists($path . '/deploy/cpanel/vendor.bundle.zip')) {
+                $errors[] = 'The <code>backend/vendor</code> directory is incomplete and no recovery bundle was found. Re-upload and extract the latest <strong>with-vendor</strong> release archive, then confirm that <code>backend/vendor/autoload.php</code>, <code>backend/vendor/symfony/deprecation-contracts/function.php</code>, or <code>deploy/cpanel/vendor.bundle.zip</code> exists.';
             } else {
                 $data['app_path'] = $path;
+
+                $existingConfig = loadExistingInstallConfig($path . '/backend/.env');
+                if ($existingConfig['detected']) {
+                    $data['upgrade_detected'] = true;
+
+                    if (empty($data['app_url']) && !empty($existingConfig['app_url'])) {
+                        $data['app_url'] = $existingConfig['app_url'];
+                    }
+                    if (empty($data['app_name']) && !empty($existingConfig['app_name'])) {
+                        $data['app_name'] = $existingConfig['app_name'];
+                    }
+
+                    $existingDb = $data['db'] ?? [];
+                    $prefillDb = $existingConfig['db'] ?? [];
+                    $data['db'] = [
+                        'host' => (string)($existingDb['host'] ?? $prefillDb['host'] ?? 'localhost'),
+                        'port' => (int)($existingDb['port'] ?? $prefillDb['port'] ?? 3306),
+                        'name' => (string)($existingDb['name'] ?? $prefillDb['name'] ?? ''),
+                        'user' => (string)($existingDb['user'] ?? $prefillDb['user'] ?? ''),
+                        'pass' => (string)($existingDb['pass'] ?? $prefillDb['pass'] ?? ''),
+                    ];
+                } else {
+                    $data['upgrade_detected'] = false;
+                }
+
                 saveData($data);
                 advance(3);
             }
@@ -212,6 +233,11 @@ function renderStep2(array $data, array $errors): void
         You can find the path by browsing to the folder in cPanel File Manager and checking the address bar at the top.
     </p>';
 
+    echo '<div class="alert alert-info">
+        If this path already contains an existing installation, the installer will automatically prefill your current
+        <code>.env</code> values on the next steps to make upgrades faster.
+    </div>';
+
     renderErrors($errors);
 
     echo '<form method="post" class="form">';
@@ -234,6 +260,10 @@ function renderStep3(array $data, array $errors): void
         The installer will verify the connection before proceeding.
     </p>';
 
+    if (!empty($data['upgrade_detected'])) {
+        echo '<div class="alert alert-success">Existing installation detected. Database fields were prefilled from your current <code>.env</code>.</div>';
+    }
+
     renderErrors($errors);
 
     $db = $data['db'] ?? [];
@@ -255,6 +285,10 @@ function renderStep4(array $data, array $errors): void
 
     echo '<h2 class="step-title">Application Settings</h2>';
     echo '<p class="step-desc">Basic configuration for your Memories Map site.</p>';
+
+    if (!empty($data['upgrade_detected'])) {
+        echo '<div class="alert alert-success">Existing installation detected. App settings were prefilled from your current <code>.env</code>.</div>';
+    }
 
     renderErrors($errors);
 
@@ -281,12 +315,27 @@ function renderStep5(array $data, array $errors): void
         echo '</pre></details>';
     }
 
-    $db = $data['db'];
+    $appPath = (string)($data['app_path'] ?? '');
+    $appUrl = (string)($data['app_url'] ?? '');
+    $appName = (string)($data['app_name'] ?? 'Memories Map');
+
+    $dbRaw = is_array($data['db'] ?? null) ? $data['db'] : [];
+    $db = [
+        'host' => (string)($dbRaw['host'] ?? 'localhost'),
+        'port' => (int)($dbRaw['port'] ?? 3306),
+        'name' => (string)($dbRaw['name'] ?? ''),
+        'user' => (string)($dbRaw['user'] ?? ''),
+    ];
+
+    if ($appPath === '' || $appUrl === '' || $db['name'] === '' || $db['user'] === '') {
+        echo '<div class="alert alert-error">Some installer values are missing. Please go back and complete each step, then return to this page.</div>';
+    }
+
     echo '<div class="review-box">';
     echo '<dl>';
-    echo '<dt>App path</dt><dd>' . htmlspecialchars($data['app_path']) . '</dd>';
-    echo '<dt>App URL</dt><dd>' . htmlspecialchars($data['app_url']) . '</dd>';
-    echo '<dt>App name</dt><dd>' . htmlspecialchars($data['app_name']) . '</dd>';
+    echo '<dt>App path</dt><dd>' . htmlspecialchars($appPath) . '</dd>';
+    echo '<dt>App URL</dt><dd>' . htmlspecialchars($appUrl) . '</dd>';
+    echo '<dt>App name</dt><dd>' . htmlspecialchars($appName) . '</dd>';
     echo '<dt>Database host</dt><dd>' . htmlspecialchars($db['host']) . ':' . (int)$db['port'] . '</dd>';
     echo '<dt>Database name</dt><dd>' . htmlspecialchars($db['name']) . '</dd>';
     echo '<dt>Database user</dt><dd>' . htmlspecialchars($db['user']) . '</dd>';
@@ -315,8 +364,8 @@ function renderStep6(): void
 {
     $log    = $_SESSION['install_log']    ?? [];
     $notice = $_SESSION['install_notice'] ?? null;
-    $appUrl = $_SESSION['installer_data']['app_url'] ?? '';
-    $adminUrl = rtrim($appUrl, '/') . '/admin';
+    $appUrl = (string)($_SESSION['installer_data']['app_url'] ?? '');
+    $adminUrl = $appUrl !== '' ? rtrim($appUrl, '/') . '/admin' : '/admin';
 
     echo '<h2 class="step-title" style="color:#059669;">✔ Installation Complete!</h2>';
     echo '<p class="step-desc">Memories Map has been successfully installed and configured.</p>';
@@ -352,15 +401,61 @@ function renderStep6(): void
 
 function runInstall(array $data): array
 {
-    $backendDir  = $data['app_path'] . '/backend';
+    $resolvedAppPath = resolveApplicationPath($data['app_path'] ?? '');
+    if (!$resolvedAppPath) {
+        return [
+            'success' => false,
+            'errors'  => ['Could not resolve the application path. Re-run the installer and choose the directory containing the Memories Map package.'],
+            'log'     => [],
+        ];
+    }
+
+    $backendDir  = $resolvedAppPath . '/backend';
     $publicHtml  = __DIR__;
     $log         = [];
     $errors      = [];
     $notice      = null;
 
     try {
-        // 1. Generate APP_KEY
-        $appKey = 'base64:' . base64_encode(random_bytes(32));
+        $permissionWarnings = applySharedHostingPermissions($resolvedAppPath, $backendDir, $publicHtml);
+        foreach ($permissionWarnings as $warning) {
+            $log[] = 'Warning: ' . $warning;
+        }
+
+        if (!hasCriticalVendorFiles($backendDir)) {
+            $restored = restoreVendorFromBundle($resolvedAppPath, $backendDir, $log);
+            if ($restored) {
+                $permissionWarnings = applySharedHostingPermissions($resolvedAppPath, $backendDir, $publicHtml);
+                foreach ($permissionWarnings as $warning) {
+                    $log[] = 'Warning: ' . $warning;
+                }
+            }
+        }
+
+        $criticalVendorFiles = [
+            $backendDir . '/vendor/autoload.php',
+            $backendDir . '/vendor/symfony/deprecation-contracts/function.php',
+        ];
+
+        foreach ($criticalVendorFiles as $criticalVendorFile) {
+            if (!file_exists($criticalVendorFile)) {
+                throw new RuntimeException(
+                    'Vendor installation is incomplete. Re-upload and re-extract the latest with-vendor release archive, then try the installer again.'
+                );
+            }
+        }
+
+        // 1. Reuse existing APP_KEY on upgrades to keep encrypted data readable.
+        $existingEnvPath = $backendDir . '/.env';
+        $existingAppKey = readExistingAppKey($existingEnvPath);
+
+        if ($existingAppKey !== null) {
+            $appKey = $existingAppKey;
+            $log[] = 'Detected existing APP_KEY and reusing it for upgrade safety.';
+        } else {
+            $appKey = 'base64:' . base64_encode(random_bytes(32));
+            $log[] = 'No existing APP_KEY found; generated a new key.';
+        }
 
         // 2. Write .env
         $log[] = 'Writing .env file…';
@@ -428,6 +523,11 @@ function runInstall(array $data): array
         }
         $log[] = 'Published ' . $published['count'] . ' file(s) to public_html.';
 
+        $permissionWarnings = applySharedHostingPermissions($resolvedAppPath, $backendDir, $publicHtml);
+        foreach ($permissionWarnings as $warning) {
+            $log[] = 'Warning: ' . $warning;
+        }
+
         // 7. Write public_html/index.php
         $log[] = 'Writing public_html/index.php…';
         writePublicIndex($publicHtml, $backendDir);
@@ -492,6 +592,99 @@ MAIL_FROM_NAME="{$appName}"
 
 FILESYSTEM_DISK=local
 ENV;
+}
+
+function readExistingAppKey(string $envPath): ?string
+{
+    if (!file_exists($envPath) || !is_readable($envPath)) {
+        return null;
+    }
+
+    $contents = @file_get_contents($envPath);
+    if ($contents === false || $contents === '') {
+        return null;
+    }
+
+    if (!preg_match('/^APP_KEY\s*=\s*(.+)$/m', $contents, $matches)) {
+        return null;
+    }
+
+    $raw = trim($matches[1]);
+    if ($raw === '') {
+        return null;
+    }
+
+    if ((str_starts_with($raw, '"') && str_ends_with($raw, '"')) || (str_starts_with($raw, "'") && str_ends_with($raw, "'"))) {
+        $raw = substr($raw, 1, -1);
+    }
+
+    return trim($raw) !== '' ? $raw : null;
+}
+
+function loadExistingInstallConfig(string $envPath): array
+{
+    $env = parseDotEnvFile($envPath);
+    if (empty($env)) {
+        return ['detected' => false];
+    }
+
+    $dbPort = isset($env['DB_PORT']) && is_numeric($env['DB_PORT']) ? (int) $env['DB_PORT'] : 3306;
+
+    return [
+        'detected' => true,
+        'app_url' => (string)($env['APP_URL'] ?? ''),
+        'app_name' => (string)($env['APP_NAME'] ?? ''),
+        'db' => [
+            'host' => (string)($env['DB_HOST'] ?? 'localhost'),
+            'port' => $dbPort,
+            'name' => (string)($env['DB_DATABASE'] ?? ''),
+            'user' => (string)($env['DB_USERNAME'] ?? ''),
+            'pass' => (string)($env['DB_PASSWORD'] ?? ''),
+        ],
+    ];
+}
+
+function parseDotEnvFile(string $envPath): array
+{
+    if (!file_exists($envPath) || !is_readable($envPath)) {
+        return [];
+    }
+
+    $contents = @file_get_contents($envPath);
+    if ($contents === false || $contents === '') {
+        return [];
+    }
+
+    $values = [];
+    $lines = preg_split('/\r\n|\r|\n/', $contents) ?: [];
+
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) {
+            continue;
+        }
+
+        $pos = strpos($line, '=');
+        if ($pos === false) {
+            continue;
+        }
+
+        $key = trim(substr($line, 0, $pos));
+        $value = trim(substr($line, $pos + 1));
+
+        if ($key === '') {
+            continue;
+        }
+
+        if ($value !== '' && ((str_starts_with($value, '"') && str_ends_with($value, '"')) || (str_starts_with($value, "'") && str_ends_with($value, "'")))) {
+            $value = substr($value, 1, -1);
+        }
+
+        $value = str_replace(['\\"', "\\'", '\\\\'], ['"', "'", '\\'], $value);
+        $values[$key] = $value;
+    }
+
+    return $values;
 }
 
 function publishToPublicHtml(string $backendDir, string $publicHtml, string $appRoot): array
@@ -599,6 +792,114 @@ function checkRequirements(): array
     if (!$sessOk) $ok = false;
 
     return ['ok' => $ok, 'items' => $items];
+}
+
+function resolveApplicationPath(string $inputPath): ?string
+{
+    $path = rtrim(trim($inputPath), '/\\');
+    $path = realpath($path) ?: $path;
+
+    if ($path && is_dir($path)) {
+        if (is_dir($path . '/backend') && file_exists($path . '/backend/artisan')) {
+            return $path;
+        }
+
+        $nested = $path . '/memories-map';
+        $nested = realpath($nested) ?: $nested;
+        if ($nested && is_dir($nested) && is_dir($nested . '/backend') && file_exists($nested . '/backend/artisan')) {
+            return $nested;
+        }
+    }
+
+    return null;
+}
+
+function hasCriticalVendorFiles(string $backendDir): bool
+{
+    return file_exists($backendDir . '/vendor/autoload.php')
+        && file_exists($backendDir . '/vendor/symfony/deprecation-contracts/function.php');
+}
+
+function restoreVendorFromBundle(string $appRoot, string $backendDir, array &$log): bool
+{
+    $bundlePath = $appRoot . '/deploy/cpanel/vendor.bundle.zip';
+    if (!file_exists($bundlePath)) {
+        $log[] = 'Vendor recovery bundle was not found at deploy/cpanel/vendor.bundle.zip.';
+        return false;
+    }
+
+    if (!class_exists('ZipArchive')) {
+        $log[] = 'PHP ZipArchive extension is not available, so vendor recovery could not run.';
+        return false;
+    }
+
+    if (!is_dir($backendDir) && !mkdir($backendDir, 0755, true)) {
+        $log[] = 'Could not create backend directory before vendor recovery.';
+        return false;
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($bundlePath) !== true) {
+        $log[] = 'Could not open vendor recovery bundle: ' . $bundlePath;
+        return false;
+    }
+
+    $ok = $zip->extractTo($backendDir);
+    $zip->close();
+
+    if (!$ok) {
+        $log[] = 'Failed to extract vendor recovery bundle into backend directory.';
+        return false;
+    }
+
+    if (hasCriticalVendorFiles($backendDir)) {
+        $log[] = 'Recovered backend/vendor from deploy/cpanel/vendor.bundle.zip.';
+        return true;
+    }
+
+    $log[] = 'Vendor recovery bundle extracted, but critical vendor files are still missing.';
+    return false;
+}
+
+function applySharedHostingPermissions(string $appRoot, string $backendDir, string $publicHtml): array
+{
+    $warnings = [];
+
+    $roots = [
+        $appRoot,
+        $backendDir,
+        $publicHtml,
+    ];
+
+    foreach ($roots as $root) {
+        if (!is_dir($root)) {
+            continue;
+        }
+
+        if (!@chmod($root, 0755)) {
+            $warnings[] = 'Could not set directory permissions on ' . $root . ' (expected 755).';
+        }
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        foreach ($iterator as $item) {
+            $path = $item->getPathname();
+            if ($item->isDir()) {
+                if (!@chmod($path, 0755)) {
+                    $warnings[] = 'Could not set directory permissions on ' . $path . ' (expected 755).';
+                }
+            } else {
+                if (!@chmod($path, 0644)) {
+                    $warnings[] = 'Could not set file permissions on ' . $path . ' (expected 644).';
+                }
+            }
+        }
+    }
+
+    return $warnings;
 }
 
 // ─────────────────────────── Utilities ───────────────────────────────────────

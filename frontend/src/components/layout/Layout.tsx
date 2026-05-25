@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   AppShell,
@@ -19,8 +19,10 @@ import {
   Divider,
   Badge,
   Box,
+  UnstyledButton,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
+import CommandPalette from '@/components/common/CommandPalette'
 import {
   IconHome,
   IconSettings,
@@ -40,6 +42,7 @@ import { getMapSectionNavLinkStyles, getMapSectionPalette } from '@/lib/mapSecti
 
 export default function Layout() {
   const [navOpen, { toggle: toggleNav, close: closeNav }] = useDisclosure(false)
+    const [paletteOpen, { open: openPalette, close: closePalette }] = useDisclosure(false)
   const [searchQuery, setSearchQuery] = useState('')
   const user = useAuthStore((s) => s.user)
   const clearAuth = useAuthStore((s) => s.clearAuth)
@@ -49,6 +52,18 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const dangerPalette = getMapSectionPalette('danger')
+
+  const handleCtrlK = useCallback((e: KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault()
+      openPalette()
+    }
+  }, [openPalette])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleCtrlK)
+    return () => window.removeEventListener('keydown', handleCtrlK)
+  }, [handleCtrlK])
 
   const handleLogout = () => {
     clearAuth()
@@ -81,6 +96,7 @@ export default function Layout() {
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
+      <CommandPalette opened={paletteOpen} onClose={closePalette} currentMapId={currentMapId} />
 
       <AppShell
         header={{ height: 60 }}
@@ -135,30 +151,28 @@ export default function Layout() {
               visibleFrom="sm"
               style={{ flex: 1, maxWidth: 420, margin: '0 16px' }}
             >
-              <TextInput
-                placeholder="Search media… (in current map)"
-                leftSection={<IconSearch size={16} aria-hidden />}
-                rightSection={
-                  searchQuery ? (
-                    <ActionIcon
-                      variant="subtle"
-                      size="sm"
-                      onClick={() => setSearchQuery('')}
-                      aria-label="Clear search"
-                    >
-                      <IconX size={14} aria-hidden />
-                    </ActionIcon>
-                  ) : (
-                    <Kbd size="xs">⏎</Kbd>
-                  )
-                }
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.currentTarget.value)}
-                aria-label="Search media in current map"
-                size="sm"
-                radius="md"
-                style={{ width: '100%' }}
-              />
+              <UnstyledButton
+                onClick={openPalette}
+                aria-label="Open command palette (Ctrl+K)"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  width: '100%',
+                  height: 36,
+                  padding: '0 12px',
+                  borderRadius: 8,
+                  border: isDark ? '1px solid rgba(34,211,224,0.22)' : '1px solid rgba(0,0,0,0.12)',
+                  background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+                  color: isDark ? '#94a3b8' : '#4a5568',
+                  fontSize: '0.875rem',
+                  cursor: 'text',
+                }}
+              >
+                <IconSearch size={14} aria-hidden style={{ flexShrink: 0 }} />
+                <Text size="sm" style={{ flex: 1, color: 'inherit' }}>Search or jump to…</Text>
+                <Kbd size="xs" style={{ flexShrink: 0 }}>Ctrl K</Kbd>
+              </UnstyledButton>
             </Box>
 
             {/* Right actions */}
@@ -370,7 +384,7 @@ export default function Layout() {
         </AppShell.Navbar>
 
         {/* ── Main Content ─────────────────────────────────────────────────── */}
-        <AppShell.Main id="main-content">
+        <AppShell.Main id="main-content" tabIndex={-1}>
           <Outlet />
         </AppShell.Main>
       </AppShell>

@@ -2,6 +2,11 @@
 
 A web application that links a library of photos and videos to an interactive map and timeline, allowing users to explore their memories by location and date.
 
+## Implementation Work Plan
+
+For the full backend + frontend + UX execution roadmap, see [IMPLEMENTATION_WORK_PLAN.md](IMPLEMENTATION_WORK_PLAN.md).
+For per-workstream release tracking and quality-gate evidence, see [releases/workstreams/INDEX.md](releases/workstreams/INDEX.md).
+
 ## Features
 
 - **Interactive map** – Browse all media on a Leaflet map, clustered by location
@@ -50,6 +55,65 @@ docker compose exec app php /var/www/memories-map/backend/artisan migrate --seed
 App URLs:
 - Frontend: http://localhost:5173
 - API: http://localhost:8080/api
+
+---
+
+## Common Tasks (Suggested Workflow)
+
+If you are deciding what kind of change to make next, use one of these common tracks.
+
+### 1) Bug fix
+
+- Reproduce the issue in Docker first.
+- Validate backend logic:
+
+```bash
+docker compose exec app php /var/www/memories-map/backend/artisan test
+```
+
+- Validate frontend compile/lint (PowerShell):
+
+```powershell
+npm.cmd --prefix frontend run build
+npm.cmd --prefix frontend run lint
+```
+
+### 2) Feature work
+
+- Add backend API changes first (controllers, policies, validation).
+- Add frontend state/UI changes second.
+- Re-run migrations and smoke test the map, timeline, upload, and share flows.
+
+### 3) UI update
+
+- Keep contrast at WCAG 2.2 AAA levels.
+- Check keyboard navigation and visible focus states.
+- Run frontend checks:
+
+```powershell
+npm.cmd --prefix frontend run build
+```
+
+### 4) README/documentation update
+
+- Update setup steps when scripts, routes, or deployment flow changes.
+- Keep Windows PowerShell command variants where relevant.
+
+### 5) Release/deployment check
+
+- Build frontend artifacts before deploy:
+
+```powershell
+npm.cmd --prefix frontend run build
+```
+
+- Run backend migrations in the target environment:
+
+```bash
+php artisan migrate --force
+```
+
+- Verify authentication, map loading, media upload, and shared-link access after release.
 
 ---
 
@@ -104,6 +168,31 @@ docker compose exec app php /var/www/memories-map/backend/artisan migrate --seed
 
 ---
 
+## Queue Worker (Media Processing)
+
+Workstream A moves heavy media processing to the queue. In Docker, a dedicated `queue_worker` service now runs automatically.
+
+Manual worker command (if needed):
+
+```bash
+docker compose exec app php /var/www/memories-map/backend/artisan queue:work --queue=media-processing,default --tries=5 --timeout=240 --backoff=10
+```
+
+Useful queue operations:
+
+```bash
+docker compose exec app php /var/www/memories-map/backend/artisan queue:failed
+docker compose exec app php /var/www/memories-map/backend/artisan queue:failed-replay --all
+```
+
+Media processing status endpoint:
+
+```text
+GET /api/maps/{map}/media/{media}/processing-status
+```
+
+---
+
 ## Production Deployment (LAMP)
 
 ### Server requirements
@@ -148,6 +237,63 @@ Ensure this directory is:
 - `chmod 750` (no world read)
 - **Not** accessible via Apache (it is not under `DocumentRoot`)
 
+### cPanel + Softaculous deployment
+
+For shared hosting and standard LAMP with cPanel, use:
+
+- `deploy/CPANEL_SOFTACULOUS_INSTALL.md`
+- `deploy/cpanel/post_install.sh`
+- `deploy/cpanel/publish_public_html.sh`
+- `deploy/cpanel/create_release_zip.sh`
+- `deploy/cpanel/create_release_zip.ps1`
+
+Quick path:
+
+1. Upload repo under your home folder (outside `public_html` when possible).
+2. Configure `backend/.env` with production DB + app URL values.
+3. Optional: create a cPanel-ready release archive locally:
+
+```bash
+bash deploy/cpanel/create_release_zip.sh
+```
+
+On Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\cpanel\create_release_zip.ps1
+```
+
+4. Run:
+
+```bash
+bash deploy/cpanel/post_install.sh
+```
+
+5. If your host does not allow document root to `backend/public`, publish to `public_html`:
+
+```bash
+PUBLIC_HTML_DIR=/home/CPANEL_USER/public_html BACKEND_DIR=/home/CPANEL_USER/memories-map/backend bash deploy/cpanel/publish_public_html.sh
+```
+
+This provides an install flow that works with common cPanel/Softaculous constraints.
+
+### Upgrade existing installation (no SSH)
+
+If you already have Memories Map deployed and want to upgrade safely via cPanel File Manager:
+
+1. Back up your current database (phpMyAdmin export) and copy your current `backend/.env`.
+2. Build or download the latest cPanel release zip (with vendor bundle).
+3. Upload the zip to your cPanel home folder and extract it to your existing app path (for example, `/home/CPANEL_USER/memories-map`).
+4. Upload `deploy/cpanel/memories-map-installer.php` to `public_html`.
+5. Open `https://your-domain.com/memories-map-installer.php` and run the wizard using your existing app path and database credentials.
+6. Let the installer complete migrations and republish frontend/public assets.
+7. Delete `memories-map-installer.php` and `memories-map-installer.lock` from `public_html`.
+
+Notes:
+- The installer now preserves an existing `APP_KEY` during upgrades so encrypted data remains readable.
+- Do not run migration files directly; the installer runs Laravel migrations automatically.
+- If you deploy manually without the installer, run `php artisan migrate --force` once in the backend.
+
 ---
 
 ## Project Structure
@@ -191,6 +337,11 @@ The_Memories_Map/
 - Passwords: bcrypt with 14 rounds, minimum 12 chars + mixed case + numbers + symbols
 - Guest access tokens validated per-map to prevent token reuse across maps
 - Media served via PHP controller (never via direct Apache URL)
+- Uploaded originals and generated thumbnails are encrypted at rest on disk (`MEDIA_ENCRYPTION_ENABLED=true`)
+- Optional dedicated key supported via `MEDIA_ENCRYPTION_KEY` (falls back to `APP_KEY`)
+- Existing plaintext media can be migrated with `php artisan media:encrypt-existing`
+- Media files are stored under per-map UUID subfolders to isolate tenant data on disk
+- Deleting a map cascades to delete all associated media records and media files
 - Sessions encrypted (`SESSION_ENCRYPT=true`)
 - CSP, HSTS, X-Frame-Options, X-Content-Type-Options headers set in Apache config
 - Modern TLS only (TLS 1.2/1.3)

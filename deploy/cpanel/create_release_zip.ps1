@@ -22,6 +22,9 @@ if (-not $SkipFrontendBuild) {
     Write-Host "--> Building frontend assets"
     Push-Location (Join-Path $RootDir "frontend")
     try {
+        # Clean only generated frontend artifacts; keep backend/public/index.php and .htaccess intact.
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $RootDir "backend\public\assets\*")
+        Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $RootDir "backend\public\index.html")
         npm.cmd ci
         npm.cmd run build
     }
@@ -39,25 +42,49 @@ New-Item -ItemType Directory -Force -Path (Join-Path $PackageRoot "backend") | O
 New-Item -ItemType Directory -Force -Path (Join-Path $PackageRoot "frontend") | Out-Null
 
 # Use robocopy to avoid copying huge dependency folders into the staging area.
-robocopy (Join-Path $RootDir "backend") (Join-Path $PackageRoot "backend") /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP /XD vendor storage\\logs storage\\framework\\cache storage\\framework\\sessions storage\\framework\\views | Out-Null
+robocopy (Join-Path $RootDir "backend") (Join-Path $PackageRoot "backend") /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP /XD vendor storage\\app storage\\logs storage\\framework\\cache storage\\framework\\sessions storage\\framework\\views | Out-Null
 robocopy (Join-Path $RootDir "frontend") (Join-Path $PackageRoot "frontend") /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP /XD node_modules | Out-Null
-Copy-Item -Recurse -Force (Join-Path $RootDir "deploy") (Join-Path $PackageRoot "deploy")
+New-Item -ItemType Directory -Force -Path (Join-Path $PackageRoot "deploy") | Out-Null
+Copy-Item -Recurse -Force (Join-Path $RootDir "deploy\cpanel") (Join-Path $PackageRoot "deploy\cpanel")
+Copy-Item -Force (Join-Path $RootDir "deploy\CPANEL_SOFTACULOUS_INSTALL.md") (Join-Path $PackageRoot "deploy\CPANEL_SOFTACULOUS_INSTALL.md")
 Copy-Item -Force (Join-Path $RootDir "README.md") (Join-Path $PackageRoot "README.md")
 
 # Vendor directory handling
 if ($IncludeVendor) {
     Write-Host "--> Copying vendor directory (this may take a minute)"
-    robocopy (Join-Path $RootDir "backend\vendor") (Join-Path $PackageRoot "backend\vendor") /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $RootDir "backend\vendor") (Join-Path $PackageRoot "backend\vendor")
+
+    Write-Host "--> Creating vendor recovery bundle"
+    $VendorBundlePath = Join-Path $PackageRoot "deploy\cpanel\vendor.bundle.zip"
+    if (Test-Path $VendorBundlePath) {
+        Remove-Item -Force $VendorBundlePath
+    }
+    Compress-Archive -Path (Join-Path $RootDir "backend\vendor\*") -DestinationPath $VendorBundlePath
 }
 else {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PackageRoot "backend\vendor")
 }
 
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PackageRoot "frontend\node_modules")
+Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $PackageRoot "backend\.env")
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PackageRoot "backend\storage\app\*")
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PackageRoot "backend\storage\logs\*")
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PackageRoot "backend\storage\framework\cache\*")
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PackageRoot "backend\storage\framework\sessions\*")
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $PackageRoot "backend\storage\framework\views\*")
+
+if ($IncludeVendor) {
+    $CriticalVendorFiles = @(
+        (Join-Path $PackageRoot "backend\vendor\autoload.php"),
+        (Join-Path $PackageRoot "backend\vendor\symfony\deprecation-contracts\function.php")
+    )
+
+    foreach ($CriticalVendorFile in $CriticalVendorFiles) {
+        if (-not (Test-Path $CriticalVendorFile)) {
+            throw "Vendor packaging failed. Missing critical file: $CriticalVendorFile"
+        }
+    }
+}
 
 if ($IncludeVendor) {
     @"

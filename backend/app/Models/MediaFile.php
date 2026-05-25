@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Casts\EncryptedJsonOrPlaintextCast;
+use App\Casts\EncryptedStringOrPlaintextCast;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -9,6 +11,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class MediaFile extends Model
 {
     use HasFactory, SoftDeletes;
+
+    public const PROCESSING_QUEUED = 'queued';
+    public const PROCESSING_PROCESSING = 'processing';
+    public const PROCESSING_COMPLETED = 'completed';
+    public const PROCESSING_FAILED = 'failed';
 
     protected $fillable = [
         'map_id',
@@ -37,6 +44,12 @@ class MediaFile extends Model
         'user_tags',
         'thumbnail_name',
         'processed_at',
+        'processing_status',
+        'processing_stage',
+        'processing_attempts',
+        'processing_error',
+        'processing_started_at',
+        'processing_finished_at',
     ];
 
     protected function casts(): array
@@ -45,16 +58,27 @@ class MediaFile extends Model
             'latitude'         => 'float',
             'longitude'        => 'float',
             'altitude'         => 'float',
+            'original_name'    => EncryptedStringOrPlaintextCast::class,
+            'location_name'    => EncryptedStringOrPlaintextCast::class,
+            'location_address' => EncryptedStringOrPlaintextCast::class,
+            'location_city'    => EncryptedStringOrPlaintextCast::class,
+            'location_country' => EncryptedStringOrPlaintextCast::class,
             'captured_at'      => 'datetime',
             'captured_at_local' => 'datetime',
+            'camera_make'      => EncryptedStringOrPlaintextCast::class,
+            'camera_model'     => EncryptedStringOrPlaintextCast::class,
             'processed_at'     => 'datetime',
-            'exif_json'        => 'array',
-            'user_tags'        => 'array',
+            'processing_started_at' => 'datetime',
+            'processing_finished_at' => 'datetime',
+            'exif_json'        => EncryptedJsonOrPlaintextCast::class,
+            'user_caption'     => EncryptedStringOrPlaintextCast::class,
+            'user_tags'        => EncryptedJsonOrPlaintextCast::class,
             'size_bytes'       => 'integer',
             'width'            => 'integer',
             'height'           => 'integer',
             'duration_seconds' => 'float',
             'timezone_offset'  => 'integer',
+            'processing_attempts' => 'integer',
         ];
     }
 

@@ -37,7 +37,7 @@ RUN echo "opcache.enable=1" >> /usr/local/etc/php/conf.d/opcache.ini \
 # Configure PHP upload limits
 RUN echo "upload_max_filesize=512M" >> /usr/local/etc/php/conf.d/uploads.ini \
     && echo "post_max_size=512M" >> /usr/local/etc/php/conf.d/uploads.ini \
-    && echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/uploads.ini \
+    && echo "memory_limit=2048M" >> /usr/local/etc/php/conf.d/uploads.ini \
     && echo "max_execution_time=300" >> /usr/local/etc/php/conf.d/uploads.ini \
     && echo "max_input_time=300" >> /usr/local/etc/php/conf.d/uploads.ini
 

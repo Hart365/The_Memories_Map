@@ -24,6 +24,7 @@ import MapLayers from '@/components/map/MapLayers'
 import MediaUploader from '@/components/media/MediaUploader'
 import BulkEditModal from '@/components/media/BulkEditModal'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
+import ProgressiveMediaImage from '@/components/media/ProgressiveMediaImage'
 import { getMapSectionActionIconStyles, getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { buildTimelineColorMap } from '@/lib/timelineColors'
 import { YEAR_BAR_COLORS } from '@/styles/mantine-theme'
@@ -344,13 +345,23 @@ export default function MapViewPage() {
     return hourBuckets.flatMap(([, items]) => items)
   }, [dayBuckets, hourBuckets, mapScopedMedia, monthBuckets, selectedHour, timelineLevel])
 
+  const galleryMedia = useMemo(() => {
+    if (timelineLevel !== 'year') return timelineMedia
+
+    // If the current map viewport has no media, keep the gallery populated with the full map scope.
+    // This avoids an empty gallery while the media count still reflects uploaded items.
+    if (viewportBounds && mapScopedMedia.length === 0) return allMedia
+
+    return timelineMedia
+  }, [allMedia, mapScopedMedia.length, timelineLevel, timelineMedia, viewportBounds])
+
   const recentMedia = useMemo(() => {
-    return [...timelineMedia].sort((a, b) => {
+    return [...galleryMedia].sort((a, b) => {
       const at = a.captured_at ? new Date(a.captured_at).getTime() : 0
       const bt = b.captured_at ? new Date(b.captured_at).getTime() : 0
       return at - bt
     })
-  }, [timelineMedia])
+  }, [galleryMedia])
 
   const galleryCols = thumbSize <= 88 ? 6 : thumbSize <= 108 ? 5 : thumbSize <= 132 ? 4 : 3
   const defaultGalleryPerPage = galleryCols * 4
@@ -575,10 +586,16 @@ export default function MapViewPage() {
                   >
                     <Popup>
                       <Stack gap={6} style={{ minWidth: 160 }}>
-                        {m.thumbnail_name && (
-                          <img src={mediaThumbUrl(mapId!, m.id)}
-                            alt={m.original_name}
-                            style={{ width: '100%', borderRadius: 6, display: 'block' }} />
+                        {m.thumbnail_name ? (
+                          <ProgressiveMediaImage
+                            src={mediaThumbUrl(mapId!, m.id)}
+                            alt={m.user_caption ?? m.original_name}
+                            style={{ width: '100%', height: effectiveThumbHeight, objectFit: 'cover', display: 'block' }}
+                          />
+                        ) : (
+                          <Box style={{ width: '100%', height: effectiveThumbHeight, borderRadius: 8, backgroundColor: isDark ? '#2a3340' : '#e5edf3', display: 'grid', placeItems: 'center' }}>
+                            <IconPhoto size={22} color={brand} aria-hidden />
+                          </Box>
                         )}
                         <Text fw={600} size="sm">{m.original_name}</Text>
                         {m.location_name && <Text size="xs" c="dimmed">{m.location_name}</Text>}
@@ -761,9 +778,14 @@ export default function MapViewPage() {
                   </Button>
                 </Group>
               </Group>
-              {viewportBounds && (
+              {viewportBounds && mapScopedMedia.length > 0 && (
                 <Text mt={6} size="xs" c="dimmed">
                   Showing media represented in current map viewport ({recentMedia.length} items).
+                </Text>
+              )}
+              {viewportBounds && mapScopedMedia.length === 0 && (
+                <Text mt={6} size="xs" c="dimmed">
+                  Current viewport has no media; showing all map media instead.
                 </Text>
               )}
             </Paper>
