@@ -45,6 +45,7 @@ Route::prefix('admin')->group(function () {
         Route::post('/settings/test-mail', [AdminSettingsController::class, 'sendTest']);
         Route::post('/settings/test-connection', [AdminSettingsController::class, 'testConnection']);
         Route::post('/settings/reset-mail', [AdminSettingsController::class, 'resetMailToEnv']);
+        Route::post('/settings/purge-database', [AdminSettingsController::class, 'purgeDatabase']);
         Route::get('/queue/health', [AdminQueueController::class, 'health']);
         Route::post('/queue/replay-failed', [AdminQueueController::class, 'replayFailed']);
     });

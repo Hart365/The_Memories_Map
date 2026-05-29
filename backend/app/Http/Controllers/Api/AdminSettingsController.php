@@ -7,6 +7,7 @@ use App\Services\MailSettingsService;
 use App\Services\SiteSettingsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 
@@ -111,6 +112,48 @@ class AdminSettingsController extends Controller
         return response()->json([
             'message' => 'Mail settings reset to environment defaults.',
             'mail' => $mailPayload,
+        ]);
+    }
+
+    public function purgeDatabase(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'max:255'],
+            'confirmation' => ['required', 'string', 'max:64'],
+        ]);
+
+        $adminUsername = $this->siteSettings->getSettings()->admin_username;
+
+        if (! $this->siteSettings->verifyAdminCredentials($adminUsername, $validated['password'])) {
+            return response()->json([
+                'message' => 'Invalid admin password.',
+            ], 422);
+        }
+
+        if (trim($validated['confirmation']) !== 'PURGE DATABASE') {
+            return response()->json([
+                'message' => 'Confirmation text must match "PURGE DATABASE" exactly.',
+            ], 422);
+        }
+
+        $migrateExit = Artisan::call('migrate:fresh', ['--force' => true]);
+        if ($migrateExit !== 0) {
+            return response()->json([
+                'message' => 'Database purge failed during migrate:fresh.',
+                'output' => trim(Artisan::output()),
+            ], 500);
+        }
+
+        $seedExit = Artisan::call('db:seed', ['--force' => true]);
+        if ($seedExit !== 0) {
+            return response()->json([
+                'message' => 'Database purge failed during db:seed.',
+                'output' => trim(Artisan::output()),
+            ], 500);
+        }
+
+        return response()->json([
+            'message' => 'Database was purged and re-initialized successfully.',
         ]);
     }
 }

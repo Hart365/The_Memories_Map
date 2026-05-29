@@ -19,10 +19,11 @@ import {
 } from '@mantine/core'
 import { useForm } from '@mantine/form'
 import { notifications } from '@mantine/notifications'
-import { IconAlertCircle, IconLock, IconMail, IconShieldCog } from '@tabler/icons-react'
+import { IconAlertCircle, IconLock, IconMail, IconShieldCog, IconTrash } from '@tabler/icons-react'
 import adminApi from '@/lib/adminApi'
 import { useAdminStore } from '@/store/adminStore'
 import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
+import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 
 interface AdminSiteSettings {
   admin_username: string
@@ -52,6 +53,9 @@ export default function AdminPage() {
   const { adminToken, setAdminToken, clearAdminToken } = useAdminStore()
   const [loginError, setLoginError] = useState<string | null>(null)
   const [testEmail, setTestEmail] = useState('')
+  const [purgePassword, setPurgePassword] = useState('')
+  const [purgeConfirmation, setPurgeConfirmation] = useState('')
+  const [confirmPurgeOpen, setConfirmPurgeOpen] = useState(false)
 
   const loginForm = useForm({
     initialValues: {
@@ -218,8 +222,28 @@ export default function AdminPage() {
     },
   })
 
+  const purgeDatabaseMutation = useMutation({
+    mutationFn: () => adminApi.post('/settings/purge-database', {
+      password: purgePassword,
+      confirmation: purgeConfirmation,
+    }),
+    onSuccess: (res) => {
+      notifications.show({ message: res.data?.message ?? 'Database purge completed.', color: 'teal' })
+      setPurgePassword('')
+      setPurgeConfirmation('')
+      setConfirmPurgeOpen(false)
+      clearAdminToken()
+    },
+    onError: (err: unknown) => {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      notifications.show({ message: message ?? 'Failed to purge database.', color: 'red' })
+      setConfirmPurgeOpen(false)
+    },
+  })
+
   const surface = isDark ? '#1a2028' : '#ffffff'
   const border = isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.06)'
+  const purgeReady = purgePassword.trim().length > 0 && purgeConfirmation.trim() === 'PURGE DATABASE'
 
   if (!adminToken) {
     return (
@@ -290,6 +314,44 @@ export default function AdminPage() {
                 checked={settingsForm.values.allow_new_user_registration}
                 onChange={(e) => settingsForm.setFieldValue('allow_new_user_registration', e.currentTarget.checked)}
               />
+            </Stack>
+          </Paper>
+
+          <Paper p="xl" radius="lg" style={{ backgroundColor: surface, border: '1px solid rgba(220,38,38,0.35)' }}>
+            <Stack gap="md">
+              <Group gap="sm">
+                <IconTrash size={22} color="#dc2626" aria-hidden />
+                <Title order={3} style={{ color: '#dc2626' }}>Danger Zone: Purge Database</Title>
+              </Group>
+              <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light" role="alert">
+                This permanently deletes all maps, media metadata, notes, guests, and user data. This action cannot be undone.
+              </Alert>
+              <PasswordInput
+                label="Confirm Admin Password"
+                value={purgePassword}
+                onChange={(e) => setPurgePassword(e.currentTarget.value)}
+                aria-label="Confirm admin password for database purge"
+              />
+              <TextInput
+                label="Type PURGE DATABASE to confirm"
+                value={purgeConfirmation}
+                onChange={(e) => setPurgeConfirmation(e.currentTarget.value)}
+                placeholder="PURGE DATABASE"
+                aria-label="Type PURGE DATABASE to confirm"
+              />
+              <Group justify="flex-end">
+                <Button
+                  type="button"
+                  variant="default"
+                  styles={getMapSectionButtonStyles('danger', 'solid')}
+                  leftSection={<IconTrash size={16} aria-hidden />}
+                  disabled={!purgeReady || purgeDatabaseMutation.isPending}
+                  loading={purgeDatabaseMutation.isPending}
+                  onClick={() => setConfirmPurgeOpen(true)}
+                >
+                  Purge Database
+                </Button>
+              </Group>
             </Stack>
           </Paper>
 
@@ -391,6 +453,17 @@ export default function AdminPage() {
           </Group>
         </Stack>
       </form>
+
+      <NativeConfirmDialog
+        opened={confirmPurgeOpen}
+        title="Purge the entire database?"
+        message="This permanently deletes all application data and rebuilds the schema. This cannot be undone."
+        confirmLabel="Yes, purge now"
+        tone="danger"
+        loading={purgeDatabaseMutation.isPending}
+        onCancel={() => setConfirmPurgeOpen(false)}
+        onConfirm={() => purgeDatabaseMutation.mutate()}
+      />
     </Container>
   )
 }
