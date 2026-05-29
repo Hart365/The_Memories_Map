@@ -1,9 +1,10 @@
 {
   "name": "memories-map-frontend",
-  "version": "0.0.5.0",
+  "version": "0.0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node ./scripts/clean-build-output.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",

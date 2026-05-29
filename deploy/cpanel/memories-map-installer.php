@@ -17,7 +17,7 @@ declare(strict_types=1);
 
 // ─────────────────────────── Bootstrap ───────────────────────────────────────
 
-define('INSTALLER_VERSION', '0.0.3.0');
+define('INSTALLER_VERSION', '0.0.6.0');
 
 $lockFile = __DIR__ . '/memories-map-installer.lock';
 if (file_exists($lockFile)) {

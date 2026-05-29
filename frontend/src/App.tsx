@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { Center, Loader, Stack, Text } from '@mantine/core'
+import { Center, Loader, Stack, Text, useComputedColorScheme } from '@mantine/core'
 import { useAuthStore } from '@/store/authStore'
 import Layout from '@/components/layout/Layout'
 
@@ -33,6 +33,8 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const isDark = useComputedColorScheme('light') === 'dark'
+
   return (
     <BrowserRouter>
       <Suspense fallback={<RouteFallback />}>
@@ -65,6 +67,24 @@ export default function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
+      <Text
+        size="xs"
+        aria-label={`Application version ${__APP_VERSION__}`}
+        style={{
+          position: 'fixed',
+          right: 10,
+          bottom: 8,
+          zIndex: 1000,
+          padding: '4px 8px',
+          borderRadius: 999,
+          backgroundColor: isDark ? 'rgba(15,23,42,0.88)' : 'rgba(255,255,255,0.92)',
+          border: isDark ? '1px solid rgba(148,163,184,0.35)' : '1px solid rgba(74,85,104,0.35)',
+          color: isDark ? '#e2e8f0' : '#334155',
+          backdropFilter: 'blur(2px)',
+        }}
+      >
+        v{__APP_VERSION__}
+      </Text>
     </BrowserRouter>
   )
 }

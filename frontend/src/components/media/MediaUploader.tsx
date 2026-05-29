@@ -24,6 +24,7 @@ interface FileItem {
 }
 
 const ACCEPTED = '.jpg,.jpeg,.png,.gif,.webp,.heic,.mp4,.mov,.avi,.mkv,.m4v'
+const UPLOAD_BATCH_SIZE = 10
 
 export default function MediaUploader({ mapId, onUploadComplete }: Props) {
   const isDark = useComputedColorScheme('light') === 'dark'
@@ -62,39 +63,70 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
   }
 
   const upload = async () => {
-    const pending = files.filter((f) => f.status === 'pending')
-    if (pending.length === 0) return
+    const pendingIndices = files
+      .map((item, index) => (item.status === 'pending' ? index : -1))
+      .filter((index) => index >= 0)
+
+    if (pendingIndices.length === 0) return
+
     setUploading(true)
     let successCount = 0
     let duplicateCount = 0
     let errorCount = 0
-    for (let i = 0; i < files.length; i++) {
-      if (files[i].status !== 'pending') continue
-      setFiles((prev) => prev.map((f, idx) => idx === i ? { ...f, status: 'uploading', progress: 10 } : f))
+
+    for (let offset = 0; offset < pendingIndices.length; offset += UPLOAD_BATCH_SIZE) {
+      const batchIndices = pendingIndices.slice(offset, offset + UPLOAD_BATCH_SIZE)
+      const batchIndexSet = new Set(batchIndices)
+
+      setFiles((prev) => prev.map((item, idx) => (
+        batchIndexSet.has(idx)
+          ? { ...item, status: 'uploading', progress: 10, errorMessage: undefined }
+          : item
+      )))
+
       try {
         const fd = new FormData()
-        fd.append('files[]', files[i].file)
+
+        for (const index of batchIndices) {
+          fd.append('files[]', files[index].file)
+        }
+
         const response = await api.post('/maps/' + mapId + '/media', fd, {
           headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (e) => {
             const pct = Math.round((e.loaded / (e.total ?? 1)) * 90) + 10
-            setFiles((prev) => prev.map((f, idx) => idx === i ? { ...f, progress: pct } : f))
+            setFiles((prev) => prev.map((item, idx) => (
+              batchIndexSet.has(idx) ? { ...item, progress: pct } : item
+            )))
           },
         })
 
-        const skipped = Number(response?.data?.skipped_count ?? 0)
-        const created = Number(response?.data?.created_count ?? 0)
-        const nextStatus: FileStatus = skipped > 0 && created === 0 ? 'duplicate' : 'success'
-        if (nextStatus === 'success') {
-          successCount++
-        } else if (nextStatus === 'duplicate') {
-          duplicateCount++
+        const duplicateNames = Array.isArray(response?.data?.duplicates)
+          ? response.data.duplicates.map((value: unknown) => String(value))
+          : []
+        const duplicateNameCounts = new Map<string, number>()
+
+        for (const name of duplicateNames) {
+          duplicateNameCounts.set(name, (duplicateNameCounts.get(name) ?? 0) + 1)
         }
 
-        setFiles((prev) => prev.map((f, idx) => idx === i
-          ? { ...f, status: nextStatus, progress: 100, errorMessage: undefined }
-          : f,
-        ))
+        setFiles((prev) => prev.map((item, idx) => {
+          if (!batchIndexSet.has(idx)) {
+            return item
+          }
+
+          const duplicateCountForName = duplicateNameCounts.get(item.file.name) ?? 0
+          const isDuplicate = duplicateCountForName > 0
+
+          if (isDuplicate) {
+            duplicateNameCounts.set(item.file.name, duplicateCountForName - 1)
+            duplicateCount++
+            return { ...item, status: 'duplicate', progress: 100, errorMessage: undefined }
+          }
+
+          successCount++
+          return { ...item, status: 'success', progress: 100, errorMessage: undefined }
+        }))
       } catch (err: unknown) {
         const axiosErr = err as {
           response?: {
@@ -105,6 +137,7 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
             }
           }
         }
+
         const status = axiosErr?.response?.status
         const responseMessage = axiosErr?.response?.data?.message
         const firstValidationError = Object.values(axiosErr?.response?.data?.errors ?? {})
@@ -113,25 +146,42 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
           || responseMessage
           || (status ? `Upload failed (${status})` : 'Upload failed')
 
-        setFiles((prev) => prev.map((f, idx) => idx === i
-          ? {
-            ...f,
-            status: status === 409 ? 'duplicate' : 'error',
-            progress: 0,
-            errorMessage: status === 409 ? undefined : errorMessage,
+        setFiles((prev) => prev.map((item, idx) => {
+          if (!batchIndexSet.has(idx)) {
+            return item
           }
-          : f,
-        ))
-        if (status !== 409) {
+
+          if (status === 409) {
+            duplicateCount++
+            return {
+              ...item,
+              status: 'duplicate',
+              progress: 100,
+              errorMessage: undefined,
+            }
+          }
+
           errorCount++
-        } else {
-          duplicateCount++
+          return {
+            ...item,
+            status: 'error',
+            progress: 0,
+            errorMessage,
+          }
+        }))
+
+        if (status !== 409) {
+          notifications.show({
+            message: `Batch upload error: ${errorMessage}`,
+            color: 'red',
+          })
         }
       }
     }
+
     setUploading(false)
     notifications.show({
-      message: `Upload finished: ${successCount} success, ${duplicateCount} duplicates, ${errorCount} failed.`,
+      message: `Upload queued: ${successCount} added, ${duplicateCount} duplicates, ${errorCount} failed. Background processing continues automatically.`,
       color: errorCount > 0 ? 'orange' : 'teal',
     })
     onUploadComplete?.()

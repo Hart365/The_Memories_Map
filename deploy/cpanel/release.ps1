@@ -34,6 +34,7 @@ $ErrorActionPreference = 'Stop'
 
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot "..\.." )).Path
 $PkgJson = Join-Path $RootDir "frontend\package.json"
+$PkgLock = Join-Path $RootDir "frontend\package-lock.json"
 $ReleaseDir = Join-Path $RootDir "deploy\releases"
 
 # 1. Read current version
@@ -59,6 +60,13 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($PkgJson, $rawJson, $utf8NoBom)
 Write-Host "--> frontend/package.json updated to $newVersion"
 
+if (Test-Path $PkgLock) {
+    $lockRaw = Get-Content $PkgLock -Raw
+    $lockRaw = $lockRaw -replace ([regex]::Escape('"version": "' + $currentVersion + '"')), ('"version": "' + $newVersion + '"')
+    [System.IO.File]::WriteAllText($PkgLock, $lockRaw, $utf8NoBom)
+    Write-Host "--> frontend/package-lock.json version metadata updated to $newVersion"
+}
+
 # 3. Docker build + lint validation
 if (-not $SkipBuild) {
     Write-Host "--> Running Docker build + ESLint validation"
@@ -68,6 +76,25 @@ if (-not $SkipBuild) {
         if ($LASTEXITCODE -ne 0) {
             throw "Build/lint FAILED (exit $LASTEXITCODE). Release aborted."
         }
+
+        Write-Host "--> Syncing Docker-built frontend artifacts to host backend/public"
+        $frontendContainerId = (docker compose ps -q frontend).Trim()
+        if ([string]::IsNullOrWhiteSpace($frontendContainerId)) {
+            throw "Unable to resolve frontend container ID for artifact sync."
+        }
+
+        $hostPublicDir = Join-Path $RootDir "backend\public"
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path $hostPublicDir "assets\*")
+        Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $hostPublicDir "index.html")
+
+        docker cp "${frontendContainerId}:/backend/public/." "$hostPublicDir"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to copy Docker-built assets to host backend/public (exit $LASTEXITCODE)."
+        }
+
+        if (-not (Test-Path (Join-Path $hostPublicDir "index.html"))) {
+            throw "Frontend artifact sync failed: backend/public/index.html was not found on host."
+        }
     }
     finally {
         Pop-Location
@@ -76,6 +103,13 @@ if (-not $SkipBuild) {
 }
 else {
     Write-Host "--> SkipBuild flag set - skipping Docker validation"
+}
+
+# Validate that a fresh frontend build artifact exists before packaging.
+$hostIndexHtml = Join-Path $RootDir "backend\public\index.html"
+$hostAssets = Get-ChildItem -Path (Join-Path $RootDir "backend\public\assets") -Filter "*.js" -ErrorAction SilentlyContinue
+if (-not (Test-Path $hostIndexHtml) -or -not $hostAssets) {
+    throw "Missing frontend build artifacts in backend/public. Run release without -SkipBuild or rebuild frontend before packaging."
 }
 
 # 4. Create release zip
