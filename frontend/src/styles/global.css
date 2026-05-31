@@ -163,3 +163,14 @@ body {
 [data-mantine-color-scheme='dark'] .native-confirm-dialog[data-tone='danger'] {
   border-color: rgba(255, 175, 194, 0.34);
 }
+
+/* Required field indicator contrast (WCAG AAA) */
+.mantine-InputWrapper-required {
+  color: #8a0f35 !important;
+  opacity: 1 !important;
+}
+
+[data-mantine-color-scheme='dark'] .mantine-InputWrapper-required {
+  color: #ffd5de !important;
+  opacity: 1 !important;
+}

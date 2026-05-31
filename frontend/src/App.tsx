@@ -77,10 +77,9 @@ export default function App() {
           zIndex: 1000,
           padding: '4px 8px',
           borderRadius: 999,
-          backgroundColor: isDark ? 'rgba(15,23,42,0.88)' : 'rgba(255,255,255,0.92)',
-          border: isDark ? '1px solid rgba(148,163,184,0.35)' : '1px solid rgba(74,85,104,0.35)',
-          color: isDark ? '#e2e8f0' : '#334155',
-          backdropFilter: 'blur(2px)',
+          backgroundColor: isDark ? '#0f172a' : '#ffffff',
+          border: isDark ? '1px solid #94a3b8' : '1px solid #334155',
+          color: isDark ? '#f8fafc' : '#1a1f2e',
         }}
       >
         v{__APP_VERSION__}

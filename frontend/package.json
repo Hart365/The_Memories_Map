@@ -1,6 +1,6 @@
 {
   "name": "memories-map-frontend",
-  "version": "0.0.7.0",
+  "version": "0.0.9.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,6 +11,11 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:fix": "eslint . --ext ts,tsx --fix",
     "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:all": "npm run test:coverage && npm run a11y:test",
+    "test:all:strict": "npm run test:coverage && cross-env A11Y_REQUIRE_AUTH=1 npm run a11y:test",
     "a11y:pa11y": "pa11y-ci --config .pa11yci.json",
     "a11y:axe": "node ./scripts/run-axe.mjs",
     "a11y:test": "node ./scripts/run-a11y.mjs"
@@ -36,6 +41,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/leaflet": "^1.9.12",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
@@ -43,18 +51,22 @@
     "@typescript-eslint/eslint-plugin": "^8.59.4",
     "@typescript-eslint/parser": "^8.59.4",
     "@vitejs/plugin-react": "^6.0.2",
+    "@vitest/coverage-v8": "^4.1.7",
     "axe-core": "^4.11.0",
+    "cross-env": "^10.1.0",
     "eslint": "^10.4.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "jsdom": "^29.1.1",
     "pa11y-ci": "^4.0.1",
     "puppeteer": "^25.0.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.9.0",
-    "vite": "^8.0.14"
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7"
   },
   "optionalDependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.0.2",
+    "@rolldown/binding-linux-x64-gnu": "^1.0.2",
     "@rolldown/binding-linux-x64-musl": "^1.0.2",
-    "@rolldown/binding-linux-x64-gnu": "^1.0.2"
+    "@rolldown/binding-win32-x64-msvc": "^1.0.2"
   }
 }

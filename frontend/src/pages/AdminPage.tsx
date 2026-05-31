@@ -252,7 +252,7 @@ export default function AdminPage() {
           <Stack gap="lg">
             <Group gap="sm">
               <IconShieldCog size={24} color={isDark ? '#22d3e0' : '#005f63'} aria-hidden />
-              <Title order={2} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>Admin Console</Title>
+              <Title order={1} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>Admin Console</Title>
             </Group>
             <Text style={{ color: isDark ? '#d7e3ec' : '#334155' }}>
               Configure site-wide settings, administrator credentials, and mail delivery.

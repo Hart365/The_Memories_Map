@@ -91,6 +91,14 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
           fd.append('files[]', files[index].file)
         }
 
+        // Keep duplicate detection conservative for batch uploads to avoid false positives.
+        fd.append('duplicate_options[filename]', '1')
+        fd.append('duplicate_options[size]', '1')
+        fd.append('duplicate_options[capture_date]', '0')
+        fd.append('duplicate_options[gps]', '0')
+        fd.append('duplicate_options[camera_make]', '0')
+        fd.append('duplicate_options[camera_model]', '0')
+
         const response = await api.post('/maps/' + mapId + '/media', fd, {
           headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (e) => {
@@ -104,11 +112,39 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
         const duplicateNames = Array.isArray(response?.data?.duplicates)
           ? response.data.duplicates.map((value: unknown) => String(value))
           : []
+        const createdNames = Array.isArray(response?.data?.data)
+          ? response.data.data
+            .map((entry: unknown) => {
+              const item = entry as { original_name?: unknown }
+              return typeof item.original_name === 'string' ? item.original_name : null
+            })
+            .filter((name: string | null): name is string => Boolean(name))
+          : []
+
+        const createdCount = Number(response?.data?.created_count ?? createdNames.length)
+        const skippedCount = Number(response?.data?.skipped_count ?? duplicateNames.length)
+
+        // If backend response totals do not match the requested batch, do not report false success.
+        if (createdCount + skippedCount !== batchIndices.length) {
+          throw new Error('Server did not confirm all files in this batch.')
+        }
+
         const duplicateNameCounts = new Map<string, number>()
+        const createdNameCounts = new Map<string, number>()
 
         for (const name of duplicateNames) {
           duplicateNameCounts.set(name, (duplicateNameCounts.get(name) ?? 0) + 1)
         }
+
+        for (const name of createdNames) {
+          createdNameCounts.set(name, (createdNameCounts.get(name) ?? 0) + 1)
+        }
+
+        let remainingUnassignedCreated = createdCount
+        for (const count of createdNameCounts.values()) {
+          remainingUnassignedCreated -= count
+        }
+        remainingUnassignedCreated = Math.max(remainingUnassignedCreated, 0)
 
         setFiles((prev) => prev.map((item, idx) => {
           if (!batchIndexSet.has(idx)) {
@@ -124,8 +160,27 @@ export default function MediaUploader({ mapId, onUploadComplete }: Props) {
             return { ...item, status: 'duplicate', progress: 100, errorMessage: undefined }
           }
 
-          successCount++
-          return { ...item, status: 'success', progress: 100, errorMessage: undefined }
+          const createdCountForName = createdNameCounts.get(item.file.name) ?? 0
+          if (createdCountForName > 0) {
+            createdNameCounts.set(item.file.name, createdCountForName - 1)
+            successCount++
+            return { ...item, status: 'success', progress: 100, errorMessage: undefined }
+          }
+
+          if (remainingUnassignedCreated > 0) {
+            remainingUnassignedCreated--
+            successCount++
+            return { ...item, status: 'success', progress: 100, errorMessage: undefined }
+          }
+
+          errorCount++
+          return {
+            ...item,
+            status: 'error',
+            progress: 0,
+            errorMessage: 'Upload could not be confirmed by server.',
+          }
+
         }))
       } catch (err: unknown) {
         const axiosErr = err as {

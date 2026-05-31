@@ -13,6 +13,8 @@
   "urls": [
     "http://127.0.0.1:4173/login",
     "http://127.0.0.1:4173/register",
+    "http://127.0.0.1:4173/admin",
+    "http://127.0.0.1:4173/shared/invalid-token",
     "http://127.0.0.1:4173/404"
   ]
 }

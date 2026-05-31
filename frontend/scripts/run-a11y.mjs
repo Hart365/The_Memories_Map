@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 
 const PREVIEW_URL = 'http://127.0.0.1:4173'
 
@@ -42,8 +43,18 @@ async function waitForServer(url, timeoutMs = 30000) {
 async function main() {
   const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
-  if (process.platform === 'win32' && !process.env.CHROME_PATH) {
-    process.env.CHROME_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+  if (process.platform === 'win32' && process.env.A11Y_FORCE_SYSTEM_BROWSER === '1' && !process.env.CHROME_PATH) {
+    const browserCandidates = [
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    ]
+
+    const detected = browserCandidates.find((path) => existsSync(path))
+    if (detected) {
+      process.env.CHROME_PATH = detected
+    }
   }
 
   await runCommand(npmCommand, ['run', 'build'])

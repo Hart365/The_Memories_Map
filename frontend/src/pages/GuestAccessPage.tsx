@@ -605,7 +605,7 @@ export default function GuestAccessPage() {
               </Title>
               <Badge color="teal" variant="light">Read-only shared access</Badge>
             </Group>
-            <Text c="dimmed" size="sm" mt={4}>
+            <Text size="sm" mt={4} style={{ color: isDark ? '#dbeaf2' : '#4a5568' }}>
               {allMedia.length} media · {geoMedia.length} with location · verified for {email}
             </Text>
           </Box>
@@ -993,7 +993,7 @@ export default function GuestAccessPage() {
         <Paper p="xl" radius="lg" shadow="xl" style={{ backgroundColor: isDark ? '#1a2028' : '#ffffff' }}>
           <Stack gap="md">
             <Title order={1} style={{ color: isDark ? '#f0f4f8' : '#1a1f2e' }}>Access Shared Map</Title>
-            <Text c="dimmed">
+            <Text style={{ color: isDark ? '#dbeaf2' : '#4a5568' }}>
               Enter the invited email address to open this secure, read-only shared map. The link and the email address must match.
             </Text>
 
