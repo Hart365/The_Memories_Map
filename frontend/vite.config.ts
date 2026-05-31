@@ -4,11 +4,8 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 
-const pkg = JSON.parse(
-  readFileSync(new URL('./package.json', import.meta.url), 'utf-8').replace(/^\uFEFF/, ''),
-) as { version: string }
-
 const currentDir = dirname(fileURLToPath(import.meta.url))
+const appVersion = readFileSync(resolve(currentDir, '../VERSION'), 'utf-8').replace(/^\uFEFF/, '').trim()
 const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://localhost:8080'
 
 export default defineConfig({
@@ -27,7 +24,7 @@ export default defineConfig({
     },
   },
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   build: {
     outDir: '../backend/public',

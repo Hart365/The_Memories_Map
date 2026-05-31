@@ -68,6 +68,30 @@ final class WorkstreamBApiQualityFeatureTest extends TestCase
         $response->assertJsonPath('meta.per_page', 1);
     }
 
+    public function test_media_index_keeps_rows_when_source_file_is_missing(): void
+    {
+        $owner = $this->createUser();
+        $map = $this->createMap($owner);
+
+        $media = MediaFile::query()->create([
+            'map_id' => $map->id,
+            'original_name' => 'missing-source.jpg',
+            'stored_name' => $map->map_uid . '/missing-source.jpg',
+            'mime_type' => 'image/jpeg',
+            'size_bytes' => 128,
+            'captured_at' => now(),
+            'processed_at' => now(),
+            'processing_status' => MediaFile::PROCESSING_COMPLETED,
+        ]);
+
+        Sanctum::actingAs($owner);
+
+        $response = $this->getJson('/api/maps/' . $map->id . '/media?per_page=10');
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.id', $media->id);
+    }
+
     public function test_notes_index_supports_cursor_and_type_filters(): void
     {
         $owner = $this->createUser();

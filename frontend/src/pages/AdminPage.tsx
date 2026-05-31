@@ -464,6 +464,12 @@ export default function AdminPage() {
         onCancel={() => setConfirmPurgeOpen(false)}
         onConfirm={() => purgeDatabaseMutation.mutate()}
       />
+
+      <Group justify="center" mt="xl">
+        <Text size="sm" style={{ color: isDark ? '#94a3b8' : '#4a5568' }} aria-label={`Application version ${__APP_VERSION__}`}>
+          Memories Map v{__APP_VERSION__}
+        </Text>
+      </Group>
     </Container>
   )
 }

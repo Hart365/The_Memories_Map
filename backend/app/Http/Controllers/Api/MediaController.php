@@ -73,7 +73,6 @@ class MediaController extends Controller
         $page = $query->cursorPaginate($perPage, ['*'], 'cursor', $validated['cursor'] ?? null);
 
         $items = collect($page->items())
-            ->filter(fn (MediaFile $media): bool => $this->mediaSourceExists($media))
             ->map(function (MediaFile $media): MediaFile {
                 if ($media->thumbnail_name && !$this->mediaThumbnailExists($media)) {
                     $media->thumbnail_name = null;
@@ -575,7 +574,6 @@ class MediaController extends Controller
             )
             ->orderBy('captured_at')
             ->get()
-            ->filter(fn (MediaFile $item): bool => $this->mediaSourceExists($item))
             ->map(function (MediaFile $item): MediaFile {
                 if ($item->thumbnail_name && !$this->mediaThumbnailExists($item)) {
                     $item->thumbnail_name = null;
@@ -586,12 +584,6 @@ class MediaController extends Controller
             ->values();
 
         return response()->json(['data' => $media]);
-    }
-
-    private function mediaSourceExists(MediaFile $media): bool
-    {
-        $sourcePath = $this->processor->storagePath((string) $media->stored_name);
-        return is_file($sourcePath);
     }
 
     private function mediaThumbnailExists(MediaFile $media): bool

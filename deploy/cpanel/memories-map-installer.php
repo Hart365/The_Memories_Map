@@ -17,7 +17,28 @@ declare(strict_types=1);
 
 // ─────────────────────────── Bootstrap ───────────────────────────────────────
 
-define('INSTALLER_VERSION', '0.0.9.0');
+function readInstallerVersion(): string
+{
+    $candidates = [
+        __DIR__ . '/VERSION',
+        __DIR__ . '/../../VERSION',
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (!is_file($candidate)) {
+            continue;
+        }
+
+        $version = trim((string) @file_get_contents($candidate));
+        if ($version !== '') {
+            return $version;
+        }
+    }
+
+    return '0.0.10.0';
+}
+
+define('INSTALLER_VERSION', readInstallerVersion());
 
 $lockFile = __DIR__ . '/memories-map-installer.lock';
 if (file_exists($lockFile)) {

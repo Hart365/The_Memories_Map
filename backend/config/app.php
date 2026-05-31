@@ -15,6 +15,8 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
+    'version' => env('APP_VERSION', trim((string) @file_get_contents(base_path('../VERSION'))) ?: '0.0.10.0'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment
