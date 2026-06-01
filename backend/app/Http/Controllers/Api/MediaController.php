@@ -163,7 +163,7 @@ class MediaController extends Controller
         
         // Extract EXIF data from upload to compare
         $needsExif = $options['capture_date'] || $options['gps'] || $options['camera_make'] || $options['camera_model'];
-        $uploadExif = $needsExif ? @exif_read_data($upload->getRealPath()) : null;
+        $uploadExif = $needsExif ? $this->safeReadExifData($upload->getRealPath()) : null;
         $uploadCapturedAt = is_array($uploadExif)
             ? ($uploadExif['DateTimeOriginal'] ?? $uploadExif['DateTime'] ?? null)
             : null;
@@ -265,6 +265,15 @@ class MediaController extends Controller
         }
         
         return false;
+    }
+
+    private function safeReadExifData(string $path): array|false
+    {
+        if (!function_exists('exif_read_data')) {
+            return false;
+        }
+
+        return @exif_read_data($path);
     }
 
     private function normalizeDuplicateOptions(array $options): array

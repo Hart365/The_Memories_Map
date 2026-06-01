@@ -19,11 +19,13 @@ final class WorkstreamAQueuePipelineFeatureTest extends TestCase
     {
         $owner = $this->createUser();
         $map = $this->createMap($owner);
+        $upload = UploadedFile::fake()->image('queue-pipeline.jpg', 80, 60);
+        $expectedSize = $upload->getSize();
 
         Sanctum::actingAs($owner);
 
         $uploadResponse = $this->post('/api/maps/' . $map->id . '/media', [
-            'files' => [UploadedFile::fake()->image('queue-pipeline.jpg', 80, 60)],
+            'files' => [$upload],
         ]);
 
         $uploadResponse->assertCreated();
@@ -58,6 +60,8 @@ final class WorkstreamAQueuePipelineFeatureTest extends TestCase
 
         $this->assertSame(MediaFile::PROCESSING_COMPLETED, $media->processing_status);
         $this->assertNotNull($media->processed_at);
+        $this->assertSame($expectedSize, $media->size_bytes);
+        $this->assertNotNull($media->thumbnail_name);
 
         $statusAfter = $this->getJson('/api/maps/' . $map->id . '/media/' . $mediaId . '/processing-status');
         $statusAfter->assertOk();

@@ -480,7 +480,8 @@ function runInstall(array $data): array
 
         // 2. Write .env
         $log[] = 'Writing .env file…';
-        $env   = buildEnv($data, $appKey);
+        $existingEnv = parseDotEnvFile($existingEnvPath);
+        $env   = buildEnv($data, $appKey, $existingEnv, $backendDir);
         if (file_put_contents($backendDir . '/.env', $env) === false) {
             throw new RuntimeException('Could not write .env to ' . $backendDir . '. Check that the directory is writable.');
         }
@@ -530,6 +531,15 @@ function runInstall(array $data): array
             $backendDir . '/storage/logs',
             $backendDir . '/storage/app/public',
         ];
+
+        $effectiveEnv = parseDotEnvFile($backendDir . '/.env');
+        $mediaStoragePath = (string)($effectiveEnv['MEDIA_STORAGE_PATH'] ?? ($backendDir . '/storage/app/private/media'));
+        $mediaStoragePath = rtrim($mediaStoragePath, '/\\');
+        if ($mediaStoragePath !== '') {
+            $dirs[] = $mediaStoragePath;
+            $dirs[] = $mediaStoragePath . '/thumbnails';
+        }
+
         foreach ($dirs as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
                 $log[] = 'Warning: could not create ' . $dir;
@@ -571,7 +581,7 @@ function runInstall(array $data): array
     }
 }
 
-function buildEnv(array $data, string $appKey): string
+function buildEnv(array $data, string $appKey, array $existingEnv = [], string $backendDir = ''): string
 {
     $db      = $data['db'];
     $appUrl  = addslashes($data['app_url']);
@@ -583,6 +593,22 @@ function buildEnv(array $data, string $appKey): string
 
     // Escape any double-quotes in the password for .env
     $dbPassEscaped = str_replace('"', '\\"', $dbPass);
+
+    $defaultMediaPath = rtrim($backendDir, '/\\') !== ''
+        ? rtrim($backendDir, '/\\') . '/storage/app/private/media'
+        : '/var/memories-map/media';
+
+    $mediaStoragePath = addslashes((string)($existingEnv['MEDIA_STORAGE_PATH'] ?? $defaultMediaPath));
+    $mediaEncryptionEnabled = toEnvBoolean($existingEnv['MEDIA_ENCRYPTION_ENABLED'] ?? 'true');
+    $mediaEncryptionKey = trim((string)($existingEnv['MEDIA_ENCRYPTION_KEY'] ?? ''));
+    $maxUploadSizeMb = (int)($existingEnv['MAX_UPLOAD_SIZE_MB'] ?? 500);
+    if ($maxUploadSizeMb <= 0) {
+        $maxUploadSizeMb = 500;
+    }
+
+    $mediaEncryptionKeyLine = $mediaEncryptionKey !== ''
+        ? 'MEDIA_ENCRYPTION_KEY=' . $mediaEncryptionKey
+        : '# MEDIA_ENCRYPTION_KEY=';
 
     return <<<ENV
 APP_NAME="{$appName}"
@@ -612,7 +638,17 @@ MAIL_FROM_ADDRESS="no-reply@example.com"
 MAIL_FROM_NAME="{$appName}"
 
 FILESYSTEM_DISK=local
+MEDIA_STORAGE_PATH="{$mediaStoragePath}"
+MEDIA_ENCRYPTION_ENABLED={$mediaEncryptionEnabled}
+{$mediaEncryptionKeyLine}
+MAX_UPLOAD_SIZE_MB={$maxUploadSizeMb}
 ENV;
+}
+
+function toEnvBoolean(mixed $value): string
+{
+    $normalized = strtolower(trim((string)$value));
+    return in_array($normalized, ['1', 'true', 'yes', 'on'], true) ? 'true' : 'false';
 }
 
 function readExistingAppKey(string $envPath): ?string
@@ -793,6 +829,25 @@ function checkRequirements(): array
         ];
         if (!$extOk) $ok = false;
     }
+
+    // Recommended extension (non-blocking)
+    $exifOk = extension_loaded('exif');
+    $items[] = [
+        'name'   => 'PHP extension: exif (recommended)',
+        'ok'     => true,
+        'detail' => $exifOk
+            ? 'Loaded'
+            : 'Not loaded. Uploads still work, but EXIF-based duplicate checks and metadata extraction are limited.',
+    ];
+
+    // Upload limits visibility (non-blocking)
+    $uploadMax = (string) ini_get('upload_max_filesize');
+    $postMax = (string) ini_get('post_max_size');
+    $items[] = [
+        'name'   => 'PHP upload limits',
+        'ok'     => true,
+        'detail' => 'upload_max_filesize=' . htmlspecialchars($uploadMax) . ', post_max_size=' . htmlspecialchars($postMax),
+    ];
 
     // Write permission in public_html
     $writable = is_writable(__DIR__);

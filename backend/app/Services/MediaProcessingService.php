@@ -107,52 +107,81 @@ class MediaProcessingService
             throw new RuntimeException('Media source file is missing for processing.');
         }
 
-        $mime = $this->detectMimeType(
-            $sourcePath,
-            pathinfo($media->stored_name, PATHINFO_EXTENSION),
-            $media->mime_type,
-        );
+        [$processingPath, $cleanupPath] = $this->processingReadablePath($sourcePath);
 
-        $attributes = [
-            'mime_type' => $mime,
-            'size_bytes' => filesize($sourcePath) ?: $media->size_bytes,
-            'processing_status' => MediaFile::PROCESSING_PROCESSING,
-            'processing_stage' => 'metadata',
-            'processing_error' => null,
-            'processing_started_at' => $media->processing_started_at ?? now(),
-            'processing_finished_at' => null,
-        ];
+        try {
+            $mime = $this->detectMimeType(
+                $processingPath,
+                pathinfo($media->stored_name, PATHINFO_EXTENSION),
+                $media->mime_type,
+            );
 
-        if (str_starts_with($mime, 'image/')) {
-            $sourceTimezone = $media->map?->user?->default_timezone ?? TimezoneService::DEFAULT_TIMEZONE;
-            $attributes = array_merge($attributes, $this->extractImageMeta($sourcePath, $sourceTimezone));
-            $attributes['processing_stage'] = 'thumbnail';
+            $attributes = [
+                'mime_type' => $mime,
+                'size_bytes' => filesize($processingPath) ?: $media->size_bytes,
+                'processing_status' => MediaFile::PROCESSING_PROCESSING,
+                'processing_stage' => 'metadata',
+                'processing_error' => null,
+                'processing_started_at' => $media->processing_started_at ?? now(),
+                'processing_finished_at' => null,
+            ];
 
-            $thumbnail = $this->generateImageThumbnail($sourcePath, $media->stored_name);
-            if ($thumbnail !== '') {
-                $attributes['thumbnail_name'] = $thumbnail;
+            if (str_starts_with($mime, 'image/')) {
+                $sourceTimezone = $media->map?->user?->default_timezone ?? TimezoneService::DEFAULT_TIMEZONE;
+                $attributes = array_merge($attributes, $this->extractImageMeta($processingPath, $sourceTimezone));
+                $attributes['processing_stage'] = 'thumbnail';
+
+                $thumbnail = $this->generateImageThumbnail($processingPath, $media->stored_name);
+                if ($thumbnail !== '') {
+                    $attributes['thumbnail_name'] = $thumbnail;
+                }
+            } elseif (str_starts_with($mime, 'video/')) {
+                $attributes = array_merge($attributes, $this->extractVideoMeta($processingPath));
+                $attributes['processing_stage'] = 'thumbnail';
+
+                $thumbnail = $this->generateVideoThumbnail($processingPath, $media->stored_name);
+                if ($thumbnail !== '') {
+                    $attributes['thumbnail_name'] = $thumbnail;
+                }
             }
-        } elseif (str_starts_with($mime, 'video/')) {
-            $attributes = array_merge($attributes, $this->extractVideoMeta($sourcePath));
-            $attributes['processing_stage'] = 'thumbnail';
 
-            $thumbnail = $this->generateVideoThumbnail($sourcePath, $media->stored_name);
-            if ($thumbnail !== '') {
-                $attributes['thumbnail_name'] = $thumbnail;
+            $this->encryptFileAtRest($sourcePath);
+            if (!empty($attributes['thumbnail_name'])) {
+                $this->encryptFileAtRest($this->thumbnailAbsolutePath((string) $attributes['thumbnail_name']));
+            }
+
+            $attributes['processed_at'] = now();
+            $attributes['processing_status'] = MediaFile::PROCESSING_COMPLETED;
+            $attributes['processing_stage'] = 'complete';
+            $attributes['processing_finished_at'] = now();
+
+            $media->forceFill($attributes)->save();
+        } finally {
+            if ($cleanupPath !== null && is_file($cleanupPath)) {
+                @unlink($cleanupPath);
             }
         }
+    }
 
-        $this->encryptFileAtRest($sourcePath);
-        if (!empty($attributes['thumbnail_name'])) {
-            $this->encryptFileAtRest($this->thumbnailAbsolutePath((string) $attributes['thumbnail_name']));
+    /** @return array{0: string, 1: string|null} */
+    private function processingReadablePath(string $sourcePath): array
+    {
+        if (!$this->isEncryptedFile($sourcePath)) {
+            return [$sourcePath, null];
         }
 
-        $attributes['processed_at'] = now();
-        $attributes['processing_status'] = MediaFile::PROCESSING_COMPLETED;
-        $attributes['processing_stage'] = 'complete';
-        $attributes['processing_finished_at'] = now();
+        $tempPath = tempnam(sys_get_temp_dir(), 'mmap-media-');
+        if ($tempPath === false) {
+            throw new RuntimeException('Unable to allocate temporary file for media processing.');
+        }
 
-        $media->forceFill($attributes)->save();
+        $plain = $this->readDecryptedContents($sourcePath);
+        if (@file_put_contents($tempPath, $plain, LOCK_EX) === false) {
+            @unlink($tempPath);
+            throw new RuntimeException('Unable to write temporary media payload for processing.');
+        }
+
+        return [$tempPath, $tempPath];
     }
 
     public function delete(MediaFile $media): void
@@ -523,7 +552,7 @@ class MediaProcessingService
     private function extractImageMeta(string $path, ?string $sourceTimezone = null): array
     {
         $attrs = [];
-        $exif = @exif_read_data($path, 'ANY_TAG', true);
+        $exif = $this->safeReadExifData($path, 'ANY_TAG', true);
 
         if ($exif) {
             if (isset($exif['GPS'])) {
@@ -567,6 +596,15 @@ class MediaProcessingService
         $this->calculateTimezoneData($attrs, $sourceTimezone);
 
         return array_filter($attrs, static fn ($value) => $value !== null);
+    }
+
+    private function safeReadExifData(string $path, ?string $sections = null, bool $arrays = false): array|false
+    {
+        if (!function_exists('exif_read_data')) {
+            return false;
+        }
+
+        return @exif_read_data($path, $sections, $arrays);
     }
 
     private function extractVideoMeta(string $path): array
