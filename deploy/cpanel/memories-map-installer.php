@@ -35,7 +35,7 @@ function readInstallerVersion(): string
         }
     }
 
-    return '0.0.10.0';
+    return '0.0.0';
 }
 
 define('INSTALLER_VERSION', readInstallerVersion());
@@ -64,6 +64,13 @@ if (session_status() === PHP_SESSION_NONE) {
 if (!isset($_POST['step']) && !isset($_SESSION['installer_step'])) {
     $_SESSION['installer_step'] = 1;
     $_SESSION['installer_data'] = [];
+}
+
+$requestedStep = filter_input(INPUT_GET, 'step', FILTER_VALIDATE_INT);
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $requestedStep !== false && $requestedStep !== null) {
+    if ($requestedStep >= 1 && $requestedStep <= 5) {
+        $_SESSION['installer_step'] = $requestedStep;
+    }
 }
 
 $step   = (int)($_POST['step'] ?? $_SESSION['installer_step'] ?? 1);
@@ -269,7 +276,10 @@ function renderStep2(array $data, array $errors): void
     echo '<input type="text" id="app_path" name="app_path" class="form-control" value="' . $val . '" required placeholder="/home/yourusername/memories-map">';
     echo '<small>Must contain a <code>backend/</code> subdirectory with <code>vendor/</code> inside it.</small>';
     echo '</div>';
+    echo '<div class="wizard-actions">';
+    echo '<a class="btn btn-secondary" href="?step=1">← Back</a>';
     echo '<button type="submit" class="btn btn-primary">Continue →</button>';
+    echo '</div>';
     echo '</form>';
 }
 
@@ -295,7 +305,10 @@ function renderStep3(array $data, array $errors): void
     echo field('db_name', 'Database Name', $db['name'] ?? '', 'text', 'Created in cPanel → MySQL Databases.');
     echo field('db_user', 'Database Username', $db['user'] ?? '', 'text', 'Created in cPanel → MySQL Databases.');
     echo field('db_pass', 'Database Password', $db['pass'] ?? '', 'password');
+    echo '<div class="wizard-actions">';
+    echo '<a class="btn btn-secondary" href="?step=2">← Back</a>';
     echo '<button type="submit" class="btn btn-primary">Test Connection &amp; Continue →</button>';
+    echo '</div>';
     echo '</form>';
 }
 
@@ -317,7 +330,10 @@ function renderStep4(array $data, array $errors): void
     echo '<input type="hidden" name="step" value="4">';
     echo field('app_url',  'Application URL',  $data['app_url']  ?? $guessUrl,        'url',  'The full URL of your site, without a trailing slash. This is used for links in emails and API responses.');
     echo field('app_name', 'Application Name', $data['app_name'] ?? 'Memories Map', 'text', 'Displayed in the browser tab and emails.');
+    echo '<div class="wizard-actions">';
+    echo '<a class="btn btn-secondary" href="?step=3">← Back</a>';
     echo '<button type="submit" class="btn btn-primary">Continue →</button>';
+    echo '</div>';
     echo '</form>';
 }
 
@@ -377,7 +393,10 @@ function renderStep5(array $data, array $errors): void
 
     echo '<form method="post" class="form">';
     echo '<input type="hidden" name="step" value="5">';
+    echo '<div class="wizard-actions">';
+    echo '<a class="btn btn-secondary" href="?step=4">← Back</a>';
     echo '<button type="submit" class="btn btn-primary btn-large">⚡ Install Now</button>';
+    echo '</div>';
     echo '</form>';
 }
 
@@ -1172,7 +1191,16 @@ function renderPage(string $title, int $step, ?string $subtitle, string $body = 
         .btn:active { transform: scale(0.98); }
         .btn-primary { background: #0d7377; color: #fff; }
         .btn-primary:hover { background: #0b5f63; }
+        .btn-secondary { background: #e2e8f0; color: #1a1f2e; }
+        .btn-secondary:hover { background: #cbd5e1; }
         .btn-large { padding: 0.8rem 2rem; font-size: 1.05rem; }
+        .wizard-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
         /* ── Alerts ── */
         .alert {
             border-radius: 6px;

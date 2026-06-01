@@ -24,6 +24,7 @@ import adminApi from '@/lib/adminApi'
 import { useAdminStore } from '@/store/adminStore'
 import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
+import useAppVersion from '@/hooks/useAppVersion'
 
 interface AdminSiteSettings {
   admin_username: string
@@ -50,6 +51,7 @@ interface AdminSettingsResponse {
 
 export default function AdminPage() {
   const isDark = useComputedColorScheme('light') === 'dark'
+  const appVersion = useAppVersion()
   const { adminToken, setAdminToken, clearAdminToken } = useAdminStore()
   const [loginError, setLoginError] = useState<string | null>(null)
   const [testEmail, setTestEmail] = useState('')
@@ -466,8 +468,8 @@ export default function AdminPage() {
       />
 
       <Group justify="center" mt="xl">
-        <Text size="sm" style={{ color: isDark ? '#94a3b8' : '#4a5568' }} aria-label={`Application version ${__APP_VERSION__}`}>
-          Memories Map v{__APP_VERSION__}
+        <Text size="sm" style={{ color: isDark ? '#94a3b8' : '#4a5568' }} aria-label={`Application version ${appVersion}`}>
+          Memories Map v{appVersion}
         </Text>
       </Group>
     </Container>

@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/authStore'
 import NativeConfirmDialog from '@/components/common/NativeConfirmDialog'
 import { getMapSectionButtonStyles } from '@/lib/mapSectionButtonStyles'
 import { DATE_FORMAT_OPTIONS, type UserDateFormat } from '@/lib/dateFormatting'
+import useAppVersion from '@/hooks/useAppVersion'
 
 interface TimezoneOption {
   value: string
@@ -25,6 +26,7 @@ export default function SettingsPage() {
   const navigate = useNavigate()
   const { user: storeUser, setAuth, clearAuth } = useAuthStore()
   const isDark = useComputedColorScheme('light') === 'dark'
+  const appVersion = useAppVersion()
   const [deleteInput, setDeleteInput] = useState('')
   const [confirmDeleteAccountOpen, setConfirmDeleteAccountOpen] = useState(false)
 
@@ -189,8 +191,8 @@ export default function SettingsPage() {
       />
 
       <Group justify="center" mt="xl">
-        <Text size="sm" style={{ color: isDark ? '#94a3b8' : '#4a5568' }} aria-label={`Application version ${__APP_VERSION__}`}>
-          Memories Map v{__APP_VERSION__}
+        <Text size="sm" style={{ color: isDark ? '#94a3b8' : '#4a5568' }} aria-label={`Application version ${appVersion}`}>
+          Memories Map v{appVersion}
         </Text>
       </Group>
     </Container>

@@ -1,5 +1,25 @@
 <?php
 
+$appVersion = (function (): string {
+    $candidates = [
+        base_path('../VERSION'),
+        base_path('../../VERSION'),
+    ];
+
+    foreach ($candidates as $candidate) {
+        if (!is_file($candidate)) {
+            continue;
+        }
+
+        $version = trim((string) @file_get_contents($candidate));
+        if ($version !== '') {
+            return $version;
+        }
+    }
+
+    return '0.0.0';
+})();
+
 return [
 
     /*
@@ -15,7 +35,7 @@ return [
 
     'name' => env('APP_NAME', 'Laravel'),
 
-    'version' => env('APP_VERSION', trim((string) @file_get_contents(base_path('../VERSION'))) ?: '0.0.10.0'),
+    'version' => env('APP_VERSION', $appVersion),
 
     /*
     |--------------------------------------------------------------------------

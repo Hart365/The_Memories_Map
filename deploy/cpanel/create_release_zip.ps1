@@ -48,6 +48,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $PackageRoot "deploy") | Ou
 Copy-Item -Recurse -Force (Join-Path $RootDir "deploy\cpanel") (Join-Path $PackageRoot "deploy\cpanel")
 Copy-Item -Force (Join-Path $RootDir "deploy\CPANEL_SOFTACULOUS_INSTALL.md") (Join-Path $PackageRoot "deploy\CPANEL_SOFTACULOUS_INSTALL.md")
 Copy-Item -Force (Join-Path $RootDir "README.md") (Join-Path $PackageRoot "README.md")
+Copy-Item -Force (Join-Path $RootDir "VERSION") (Join-Path $PackageRoot "VERSION")
 
 # Vendor directory handling
 if ($IncludeVendor) {

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Center, Loader, Stack, Text, useComputedColorScheme } from '@mantine/core'
 import { useAuthStore } from '@/store/authStore'
 import Layout from '@/components/layout/Layout'
+import useAppVersion from '@/hooks/useAppVersion'
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
 const RegisterPage = lazy(() => import('@/pages/RegisterPage'))
@@ -34,6 +35,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const isDark = useComputedColorScheme('light') === 'dark'
+  const appVersion = useAppVersion()
 
   return (
     <BrowserRouter>
@@ -69,7 +71,7 @@ export default function App() {
       </Suspense>
       <Text
         size="xs"
-        aria-label={`Application version ${__APP_VERSION__}`}
+        aria-label={`Application version ${appVersion}`}
         style={{
           position: 'fixed',
           right: 10,
@@ -82,7 +84,7 @@ export default function App() {
           color: isDark ? '#f8fafc' : '#1a1f2e',
         }}
       >
-        v{__APP_VERSION__}
+        v{appVersion}
       </Text>
     </BrowserRouter>
   )

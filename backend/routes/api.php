@@ -34,6 +34,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/guest-login', [AuthController::class, 'guestLogin']);
 Route::post('/guest-access/{token}', [AuthController::class, 'guestAccess']);
 Route::get('/public/settings', [PublicSettingsController::class, 'show']);
+Route::get('/public/version', fn () => response()->json([
+    'version' => (string) config('app.version', '0.0.0'),
+]));
 
 Route::prefix('admin')->group(function () {
     Route::post('/login', [AdminAuthController::class, 'login']);
