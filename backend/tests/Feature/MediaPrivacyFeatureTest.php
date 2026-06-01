@@ -82,6 +82,43 @@ final class MediaPrivacyFeatureTest extends TestCase
         $this->assertSame(1, MediaFile::query()->where('map_id', $targetMap->id)->count());
     }
 
+    public function test_video_upload_uses_extension_mime_fallback_when_detection_is_generic(): void
+    {
+        $owner = $this->createUser();
+        $map = $this->createMap($owner);
+
+        Sanctum::actingAs($owner);
+
+        $upload = UploadedFile::fake()->create('mime-fallback.mp4', 512, 'video/mp4');
+
+        $response = $this->withHeader('Accept', 'application/json')->post(
+            '/api/maps/' . $map->id . '/media',
+            [
+                'files' => [$upload],
+                'duplicate_options' => [
+                    'filename' => false,
+                    'size' => false,
+                    'capture_date' => false,
+                    'gps' => false,
+                    'camera_make' => false,
+                    'camera_model' => false,
+                ],
+            ]
+        );
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('created_count', 1);
+
+        $media = MediaFile::query()
+            ->where('map_id', $map->id)
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($media);
+        $this->assertSame('video/mp4', $media->mime_type);
+    }
+
     public function test_tokenized_media_endpoint_serves_decrypted_encrypted_content(): void
     {
         $owner = $this->createUser();

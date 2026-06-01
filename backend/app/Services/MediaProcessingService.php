@@ -54,12 +54,23 @@ class MediaProcessingService
         $targetDir = $this->storagePath . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $mapPrefix);
         $this->ensureDirectory($targetDir);
 
+        $clientMime = null;
+        try {
+            $clientMime = $upload->getClientMimeType();
+        } catch (\Throwable) {
+            $clientMime = null;
+        }
+
         $storedFileName = Str::uuid() . '.' . $upload->getClientOriginalExtension();
         $upload->move($targetDir, $storedFileName);
 
         $storedName = $mapPrefix . '/' . $storedFileName;
         $fullPath = $targetDir . DIRECTORY_SEPARATOR . $storedFileName;
-        $mime = mime_content_type($fullPath) ?: $upload->getMimeType();
+        $mime = $this->detectMimeType(
+            $fullPath,
+            $upload->getClientOriginalExtension(),
+            $clientMime,
+        );
 
         $attributes = [
             'map_id' => $map->id,
@@ -96,7 +107,11 @@ class MediaProcessingService
             throw new RuntimeException('Media source file is missing for processing.');
         }
 
-        $mime = mime_content_type($sourcePath) ?: ($media->mime_type ?: 'application/octet-stream');
+        $mime = $this->detectMimeType(
+            $sourcePath,
+            pathinfo($media->stored_name, PATHINFO_EXTENSION),
+            $media->mime_type,
+        );
 
         $attributes = [
             'mime_type' => $mime,
@@ -699,6 +714,77 @@ class MediaProcessingService
     {
         exec('ffmpeg -version 2>&1', $_, $code);
         return $code === 0;
+    }
+
+    private function detectMimeType(string $path, ?string $extension = null, ?string $fallbackMime = null): string
+    {
+        $detected = @mime_content_type($path);
+        $mime = is_string($detected) ? strtolower(trim($detected)) : null;
+
+        if ($this->isGenericMimeType($mime)) {
+            $mime = null;
+        }
+        if ($mime !== null) {
+            $mime = $this->normalizeMimeAlias($mime);
+        }
+
+        $fallback = is_string($fallbackMime) ? strtolower(trim($fallbackMime)) : null;
+        if ($mime === null && $fallback !== null && !$this->isGenericMimeType($fallback)) {
+            $mime = $this->normalizeMimeAlias($fallback);
+        }
+
+        if ($mime === null) {
+            $mime = $this->mimeFromExtension($extension);
+        }
+
+        return $mime ?? 'application/octet-stream';
+    }
+
+    private function normalizeMimeAlias(string $mime): string
+    {
+        return match ($mime) {
+            'application/mp4', 'application/mpeg4' => 'video/mp4',
+            'image/jpg' => 'image/jpeg',
+            default => $mime,
+        };
+    }
+
+    private function isGenericMimeType(?string $mime): bool
+    {
+        if ($mime === null || $mime === '') {
+            return true;
+        }
+
+        return in_array($mime, [
+            'application/octet-stream',
+            'binary/octet-stream',
+            'application/unknown',
+            'application/x-empty',
+            'inode/x-empty',
+        ], true);
+    }
+
+    private function mimeFromExtension(?string $extension): ?string
+    {
+        if ($extension === null || $extension === '') {
+            return null;
+        }
+
+        $ext = strtolower(ltrim($extension, '.'));
+
+        return match ($ext) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            'heic' => 'image/heic',
+            'heif' => 'image/heif',
+            'mp4', 'm4v' => 'video/mp4',
+            'mov' => 'video/quicktime',
+            'avi' => 'video/x-msvideo',
+            'mkv' => 'video/x-matroska',
+            default => null,
+        };
     }
 
     private function sanitizeForJson(mixed $value): mixed
