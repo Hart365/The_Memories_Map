@@ -189,7 +189,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             break;
     }
-    $step = $_SESSION['installer_step'];
+    $step = (int)($_SESSION['installer_step'] ?? $step ?? 1);
 }
 
 // ─────────────────────────── Page rendering ──────────────────────────────────
@@ -431,6 +431,23 @@ function runInstall(array $data): array
         ];
     }
 
+    $db = $data['db'] ?? null;
+    if (!is_array($db) || ($db['name'] ?? '') === '' || ($db['user'] ?? '') === '') {
+        return [
+            'success' => false,
+            'errors'  => ['Installer data is incomplete (database settings are missing). Please go back to Step 3 and continue again.'],
+            'log'     => [],
+        ];
+    }
+
+    if ((string)($data['app_url'] ?? '') === '' || (string)($data['app_name'] ?? '') === '') {
+        return [
+            'success' => false,
+            'errors'  => ['Installer data is incomplete (application settings are missing). Please go back to Step 4 and continue again.'],
+            'log'     => [],
+        ];
+    }
+
     $backendDir  = $resolvedAppPath . '/backend';
     $publicHtml  = __DIR__;
     $log         = [];
@@ -548,7 +565,7 @@ function runInstall(array $data): array
 
         // 6. Publish compiled frontend assets to public_html
         $log[] = 'Publishing frontend assets to public_html…';
-        $published = publishToPublicHtml($backendDir, $publicHtml, $data['app_path']);
+        $published = publishToPublicHtml($backendDir, $publicHtml, $resolvedAppPath);
         if ($published['errors']) {
             foreach ($published['errors'] as $e) $log[] = 'Warning: ' . $e;
         }
@@ -583,13 +600,14 @@ function runInstall(array $data): array
 
 function buildEnv(array $data, string $appKey, array $existingEnv = [], string $backendDir = ''): string
 {
-    $db      = $data['db'];
-    $appUrl  = addslashes($data['app_url']);
-    $appName = addslashes($data['app_name']);
-    $dbHost  = addslashes($db['host']);
-    $dbName  = addslashes($db['name']);
-    $dbUser  = addslashes($db['user']);
-    $dbPass  = $db['pass']; // Raw — written quoted below
+    $db      = is_array($data['db'] ?? null) ? $data['db'] : [];
+    $appUrl  = addslashes((string)($data['app_url'] ?? 'https://your-domain.com'));
+    $appName = addslashes((string)($data['app_name'] ?? 'Memories Map'));
+    $dbHost  = addslashes((string)($db['host'] ?? 'localhost'));
+    $dbPort  = (int)($db['port'] ?? 3306);
+    $dbName  = addslashes((string)($db['name'] ?? ''));
+    $dbUser  = addslashes((string)($db['user'] ?? ''));
+    $dbPass  = (string)($db['pass'] ?? ''); // Raw — written quoted below
 
     // Escape any double-quotes in the password for .env
     $dbPassEscaped = str_replace('"', '\\"', $dbPass);
@@ -622,7 +640,7 @@ LOG_LEVEL=error
 
 DB_CONNECTION=mysql
 DB_HOST={$dbHost}
-DB_PORT={$db['port']}
+DB_PORT={$dbPort}
 DB_DATABASE={$dbName}
 DB_USERNAME={$dbUser}
 DB_PASSWORD="{$dbPassEscaped}"
