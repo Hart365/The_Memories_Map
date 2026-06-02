@@ -590,6 +590,14 @@ function runInstall(array $data): array
         }
         $log[] = 'Published ' . $published['count'] . ' file(s) to public_html.';
 
+        $publishedFrontendIndex = $publicHtml . '/index.html';
+        $backendFrontendIndex = $backendDir . '/public/index.html';
+        if (!file_exists($publishedFrontendIndex) && !file_exists($backendFrontendIndex)) {
+            throw new RuntimeException(
+                'Frontend build files were not found after publish. Re-upload a release package that includes backend/public/index.html and retry the installer.'
+            );
+        }
+
         $permissionWarnings = applySharedHostingPermissions($resolvedAppPath, $backendDir, $publicHtml);
         foreach ($permissionWarnings as $warning) {
             $log[] = 'Warning: ' . $warning;
@@ -606,6 +614,15 @@ function runInstall(array $data): array
         if (file_exists($htaccessSrc) && !file_exists($htaccessDst)) {
             copy($htaccessSrc, $htaccessDst);
             $log[] = '.htaccess copied.';
+        }
+
+        $runtimeFileErrors = verifyInstalledRuntimeFiles($backendDir, $publicHtml);
+        if (!empty($runtimeFileErrors)) {
+            foreach ($runtimeFileErrors as $runtimeFileError) {
+                $log[] = 'Missing required file: ' . $runtimeFileError;
+            }
+
+            throw new RuntimeException('Installation is incomplete. One or more required runtime files are missing.');
         }
 
         $log[] = 'Installation finished successfully.';
@@ -838,6 +855,31 @@ require \$_backendDir . '/vendor/autoload.php';
 PHP;
 
     file_put_contents($publicHtml . '/index.php', $content);
+}
+
+function verifyInstalledRuntimeFiles(string $backendDir, string $publicHtml): array
+{
+    $requiredPaths = [
+        $backendDir . '/vendor/autoload.php',
+        $backendDir . '/bootstrap/app.php',
+        $backendDir . '/public/index.html',
+        $publicHtml . '/index.php',
+        $publicHtml . '/index.html',
+    ];
+
+    $missing = [];
+    foreach ($requiredPaths as $requiredPath) {
+        if (!file_exists($requiredPath)) {
+            $missing[] = $requiredPath;
+        }
+    }
+
+    $publicAssetsPath = $publicHtml . '/assets';
+    if (!is_dir($publicAssetsPath)) {
+        $missing[] = $publicAssetsPath;
+    }
+
+    return $missing;
 }
 
 // ─────────────────────────── Requirements check ──────────────────────────────

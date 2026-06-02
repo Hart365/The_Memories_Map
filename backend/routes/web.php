@@ -12,14 +12,28 @@ use Illuminate\Support\Facades\Route;
 */
 
 $serveFrontend = function () {
-    $indexPath = public_path('index.html');
+    $candidates = [
+        public_path('index.html'),
+    ];
 
-    if (is_file($indexPath)) {
-        return response()->file($indexPath);
+    $scriptDir = isset($_SERVER['SCRIPT_FILENAME']) ? dirname((string) $_SERVER['SCRIPT_FILENAME']) : null;
+    if (is_string($scriptDir) && $scriptDir !== '') {
+        $candidates[] = $scriptDir . DIRECTORY_SEPARATOR . 'index.html';
+    }
+
+    $documentRoot = $_SERVER['DOCUMENT_ROOT'] ?? null;
+    if (is_string($documentRoot) && $documentRoot !== '') {
+        $candidates[] = rtrim($documentRoot, '/\\') . DIRECTORY_SEPARATOR . 'index.html';
+    }
+
+    foreach (array_unique($candidates) as $indexPath) {
+        if (is_file($indexPath)) {
+            return response()->file($indexPath);
+        }
     }
 
     return response()->json([
-        'message' => 'Frontend build not found. Run the frontend build to generate public/index.html.',
+        'message' => 'Frontend build not found. Ensure index.html exists in backend/public or public_html.',
     ], 503);
 };
 

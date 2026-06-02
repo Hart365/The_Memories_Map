@@ -33,6 +33,15 @@ if (-not $SkipFrontendBuild) {
     }
 }
 
+$FrontendIndexPath = Join-Path $RootDir "backend\public\index.html"
+if (-not (Test-Path $FrontendIndexPath)) {
+    if ($SkipFrontendBuild) {
+        throw "backend/public/index.html is missing. Re-run packaging without -SkipFrontendBuild so frontend assets are generated."
+    }
+
+    throw "Frontend build failed to produce backend/public/index.html."
+}
+
 $StageRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("memories-map-release-" + [System.Guid]::NewGuid().ToString("N"))
 $PackageRoot = Join-Path $StageRoot "memories-map"
 New-Item -ItemType Directory -Force -Path $PackageRoot | Out-Null
@@ -123,6 +132,35 @@ if (Test-Path $OutputPath) {
 Write-Host "--> Creating zip archive"
 Compress-Archive -Path (Join-Path $StageRoot "memories-map") -DestinationPath $OutputPath
 Remove-Item -Recurse -Force $StageRoot
+
+$ArchiveInfo = Get-Item -Path $OutputPath -ErrorAction Stop
+if ($ArchiveInfo.Length -lt 1024) {
+    throw "Release archive appears invalid (size: $($ArchiveInfo.Length) bytes): $OutputPath"
+}
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$Zip = [System.IO.Compression.ZipFile]::OpenRead($OutputPath)
+try {
+    if ($Zip.Entries.Count -eq 0) {
+        throw "Release archive contains no files: $OutputPath"
+    }
+
+    $EntryNames = $Zip.Entries | ForEach-Object { ($_.FullName -replace '\\', '/') }
+    $RequiredEntries = @(
+        'memories-map/backend/public/index.html',
+        'memories-map/deploy/cpanel/memories-map-installer.php',
+        'memories-map/VERSION'
+    )
+
+    foreach ($RequiredEntry in $RequiredEntries) {
+        if (-not ($EntryNames -contains $RequiredEntry)) {
+            throw "Release archive is missing required entry: $RequiredEntry"
+        }
+    }
+}
+finally {
+    $Zip.Dispose()
+}
 
 Write-Host "==> Release archive created"
 Write-Host $OutputPath
