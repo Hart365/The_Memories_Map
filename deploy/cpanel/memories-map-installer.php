@@ -402,10 +402,12 @@ function renderStep5(array $data, array $errors): void
 
 function renderStep6(): void
 {
-    $log    = $_SESSION['install_log']    ?? [];
-    $notice = $_SESSION['install_notice'] ?? null;
-    $appUrl = (string)($_SESSION['installer_data']['app_url'] ?? '');
-    $adminUrl = $appUrl !== '' ? rtrim($appUrl, '/') . '/admin' : '/admin';
+    $log        = $_SESSION['install_log']        ?? [];
+    $notice     = $_SESSION['install_notice']     ?? null;
+    $appUrl     = (string)($_SESSION['installer_data']['app_url'] ?? '');
+    $adminUrl   = $appUrl !== '' ? rtrim($appUrl, '/') . '/admin' : '/admin';
+    $backendDir = (string)($_SESSION['installer_backend_dir'] ?? '');
+    $artisanPath = $backendDir !== '' ? $backendDir . '/artisan' : '/home/username/memories-map/backend/artisan';
 
     echo '<h2 class="step-title" style="color:#059669;">✔ Installation Complete!</h2>';
     echo '<p class="step-desc">Memories Map has been successfully installed and configured.</p>';
@@ -423,10 +425,19 @@ function renderStep6(): void
         </ul>
     </div>';
 
+    echo '<div class="alert alert-info" style="border-color:#0d7377;">';
+    echo '<strong>Required: Set Up a Cron Job for Media Processing</strong>';
+    echo '<p style="margin:8px 0 4px;">Memories Map uses a background queue to process uploaded photos (extract metadata, generate thumbnails). Without a cron job, uploaded files will remain in a <em>queued</em> state and never appear in your map.</p>';
+    echo '<p style="margin:4px 0;">In cPanel, go to <strong>Cron Jobs</strong> and add the following command to run every minute:</p>';
+    echo '<pre style="background:#f0fafa;padding:10px 14px;border-radius:4px;overflow-x:auto;font-size:13px;">php ' . htmlspecialchars($artisanPath) . ' queue:work --queue=media-processing --max-time=55 --once</pre>';
+    echo '<p style="margin:4px 0 0;"><small>Set the schedule to <strong>* * * * *</strong> (every minute). If your host requires a specific PHP version path (e.g. <code>/usr/local/bin/php82</code>), replace <code>php</code> with that path. You can find it in cPanel → <em>Select PHP Version</em>.</small></p>';
+    echo '</div>';
+
     echo '<div class="next-steps">';
     echo '<h3>Next Steps</h3>';
     echo '<ol>';
     echo '<li>Delete the installer files listed above.</li>';
+    echo '<li>Add the cron job shown above in cPanel → Cron Jobs.</li>';
     echo '<li><a href="' . htmlspecialchars($appUrl) . '" target="_blank">Open your site →</a> and create your first account.</li>';
     echo '<li><a href="' . htmlspecialchars($adminUrl) . '" target="_blank">Visit the Admin Console →</a> to configure mail delivery and other settings.<br>
                <em>Default credentials — Username: <code>MemoriesAdmin</code> &nbsp; Password: <code>WeC4nRemember!tForYouWh0le$al3</code> — change these immediately.</em></li>';
@@ -472,6 +483,7 @@ function runInstall(array $data): array
     $log         = [];
     $errors      = [];
     $notice      = null;
+    $_SESSION['installer_backend_dir'] = $backendDir;
 
     try {
         $permissionWarnings = applySharedHostingPermissions($resolvedAppPath, $backendDir, $publicHtml);
@@ -683,7 +695,7 @@ DB_PASSWORD="{$dbPassEscaped}"
 
 BROADCAST_DRIVER=log
 CACHE_DRIVER=file
-QUEUE_CONNECTION=sync
+QUEUE_CONNECTION=database
 SESSION_DRIVER=file
 SESSION_LIFETIME=120
 
